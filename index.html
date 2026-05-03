@@ -658,35 +658,41 @@
         ];
 
         // STATE
+        const FlightContext = {
+            currentFlight: null,
+            sessionEnded: false,
+            planeOverlayX: null,
+            planeOverlayY: null,
+            planeOverlayBearing: 0,
+            rafId: null,
+            sessionStartTime: 0,
+            totalPausedMs: 0,
+            pauseStartTime: 0,
+            isManuallyPaused: false,
+            atcTriggered: { takeoff: false, cruise: false, landing: false },
+            activeTimeouts: [],
+            breakEndTime: 0
+        };
+
         let map, pathLine, mapMode = false, mapSelections = [];
         let pendingRoute = { from: null, to: null };
         let connectedAirport = null;
-        let currentFlight = null, audioCtx = null;
+        let audioCtx = null;
         let humOsc1 = null, humOsc2 = null, pinkNoise = null, ambientGain = null, lfoOsc = null, lfoGain = null;
         let isAtcEnabled = localStorage.getItem('isAtcEnabled') !== 'false';
         let isAmbEnabled = localStorage.getItem('isAmbEnabled') !== 'false';
-        
-        let planeOverlayX = null;
-        let planeOverlayY = null;
-        let planeOverlayBearing = 0;
+        let sessionTimer = null;
 
-        let sessionTimer = null, rafId = null, sessionStartTime = 0, breakEndTime = 0;
-        let atcTriggered = { takeoff: false, cruise: false, landing: false };
-
-        let activeTimeouts = [];
         function setStoppableTimeout(fn, delay) {
             let t = setTimeout(fn, delay);
-            activeTimeouts.push(t);
+            FlightContext.activeTimeouts.push(t);
             return t;
         }
         function clearAllTimeouts() {
-            activeTimeouts.forEach(clearTimeout);
-            activeTimeouts = [];
+            FlightContext.activeTimeouts.forEach(clearTimeout);
+            FlightContext.activeTimeouts = [];
         }
 
-        let totalPausedMs = 0;
-        let pauseStartTime = 0;
-        let isManuallyPaused = false;
         let cachedFlightArc = [];
         
         let autoFollow = true;
@@ -713,8 +719,8 @@
 
         function startAutoFollow() {
             clearAutoFollow();
-            if (autoFollow && currentFlight && typeof currentFlight.targetLat !== 'undefined') {
-                map.setView([currentFlight.targetLat, currentFlight.targetLon], map.getZoom(), { animate: false });
+            if (autoFollow && FlightContext.currentFlight && typeof FlightContext.currentFlight.targetLat !== 'undefined') {
+                map.setView([FlightContext.currentFlight.targetLat, FlightContext.currentFlight.targetLon], map.getZoom(), { animate: false });
             }
             updateControlBtns();
         }
@@ -724,31 +730,31 @@
         let selectedAircraftId = localStorage.getItem('selectedAircraftId') || 'b737';
 
         function setPausedState(paused) {
-            isManuallyPaused = paused;
+            FlightContext.isManuallyPaused = paused;
             let pauseBtn = document.getElementById('btn-pause');
             let overlay = document.getElementById('map-overlay-paused');
             if (paused) {
-                if (rafId) {
-                    cancelAnimationFrame(rafId);
-                    rafId = null;
+                if (FlightContext.rafId) {
+                    cancelAnimationFrame(FlightContext.rafId);
+                    FlightContext.rafId = null;
                 }
                 clearAutoFollow();
-                if (pauseStartTime === 0) pauseStartTime = Date.now();
+                if (FlightContext.pauseStartTime === 0) FlightContext.pauseStartTime = Date.now();
                 if (ambientGain) ambientGain.gain.setValueAtTime(0, audioCtx.currentTime);
                 if (pauseBtn) pauseBtn.innerHTML = "▶ Resume";
                 if (overlay) overlay.classList.remove('hidden');
             } else {
-                if (pauseStartTime > 0) {
-                    totalPausedMs += (Date.now() - pauseStartTime);
-                    pauseStartTime = 0;
+                if (FlightContext.pauseStartTime > 0) {
+                    FlightContext.totalPausedMs += (Date.now() - FlightContext.pauseStartTime);
+                    FlightContext.pauseStartTime = 0;
                 }
                 if (ambientGain && isAmbEnabled) ambientGain.gain.setValueAtTime(0.04, audioCtx.currentTime);
                 if (pauseBtn) pauseBtn.innerHTML = "⏸ Pause";
                 if (overlay) overlay.classList.add('hidden');
                 
-                if (currentFlight && !document.getElementById('view-hud').classList.contains('hidden')) {
+                if (FlightContext.currentFlight && !document.getElementById('view-hud').classList.contains('hidden')) {
                     if (autoFollow) startAutoFollow();
-                    rafId = requestAnimationFrame(updateHUD);
+                    FlightContext.rafId = requestAnimationFrame(updateHUD);
                 }
             }
         }
@@ -761,21 +767,21 @@
 
         document.addEventListener("visibilitychange", () => {
             if (document.hidden) {
-                if (rafId && !isManuallyPaused) {
-                    cancelAnimationFrame(rafId);
-                    rafId = null;
+                if (FlightContext.rafId && !FlightContext.isManuallyPaused) {
+                    cancelAnimationFrame(FlightContext.rafId);
+                    FlightContext.rafId = null;
                     clearAutoFollow();
                 }
             } else {
                 // Tab became visible
-                if (!isManuallyPaused && currentFlight && !document.getElementById('view-hud').classList.contains('hidden')) {
+                if (!FlightContext.isManuallyPaused && FlightContext.currentFlight && !document.getElementById('view-hud').classList.contains('hidden')) {
                     // check if session should have ended
-                    let elapsed = Date.now() - sessionStartTime - totalPausedMs;
-                    if (elapsed >= currentFlight.totalMs) {
+                    let elapsed = Date.now() - FlightContext.sessionStartTime - FlightContext.totalPausedMs;
+                    if (elapsed >= FlightContext.currentFlight.totalMs) {
                         endFlight(true);
                     } else {
                         if (autoFollow) startAutoFollow();
-                        rafId = requestAnimationFrame(updateHUD);
+                        FlightContext.rafId = requestAnimationFrame(updateHUD);
                     }
                 }
             }
@@ -1108,7 +1114,7 @@
         }
 
         function selectRoute(route) {
-            currentFlight = { ...route, num: "FT-" + Math.floor(Math.random()*900 + 100) };
+            FlightContext.currentFlight = { ...route, num: "FT-" + Math.floor(Math.random()*900 + 100) };
             
             resetMap();
             let p1 = getAirport(route.from);
@@ -1119,7 +1125,7 @@
             
             // Curve
             let latlngs = [];
-            let currentDistKm = currentFlight.distKm || haversine(p1.lat, p1.lon, p2.lat, p2.lon);
+            let currentDistKm = FlightContext.currentFlight.distKm || haversine(p1.lat, p1.lon, p2.lat, p2.lon);
             let arcMax = Math.min(currentDistKm * 0.0003, 15);
             for(let i=0; i<=500; i++){
                 let f = i/500;
@@ -1208,24 +1214,24 @@
         
         document.getElementById('btn-confirm-aircraft').onclick = () => {
             showView('view-boarding-pass');
-            document.getElementById('bp-flight-no').innerText = currentFlight.num;
-            document.getElementById('bp-from').innerText = currentFlight.from;
-            document.getElementById('bp-to').innerText = currentFlight.to;
+            document.getElementById('bp-flight-no').innerText = FlightContext.currentFlight.num;
+            document.getElementById('bp-from').innerText = FlightContext.currentFlight.from;
+            document.getElementById('bp-to').innerText = FlightContext.currentFlight.to;
             
             let ac = AIRCRAFT_DB.find(a => a.id === selectedAircraftId) || AIRCRAFT_DB[0];
             document.getElementById('bp-aircraft').innerText = ac.name;
             
-            if (currentFlight.distKm && currentFlight.distMi) {
-                document.getElementById('bp-distance').innerText = `${Math.round(currentFlight.distKm).toLocaleString()} km (${Math.round(currentFlight.distMi).toLocaleString()} miles)`;
+            if (FlightContext.currentFlight.distKm && FlightContext.currentFlight.distMi) {
+                document.getElementById('bp-distance').innerText = `${Math.round(FlightContext.currentFlight.distKm).toLocaleString()} km (${Math.round(FlightContext.currentFlight.distMi).toLocaleString()} miles)`;
             } else {
                 document.getElementById('bp-distance').innerText = "--";
             }
             
-            document.getElementById('bp-duration').innerText = currentFlight.min + "m";
+            document.getElementById('bp-duration').innerText = FlightContext.currentFlight.min + "m";
             document.getElementById('bp-gate').innerText = "G" + Math.floor(Math.random()*20+1);
             
-            let p1 = getAirport(currentFlight.from);
-            let p2 = getAirport(currentFlight.to);
+            let p1 = getAirport(FlightContext.currentFlight.from);
+            let p2 = getAirport(FlightContext.currentFlight.to);
             fetchWeather(p1.lat, p1.lon, 'bp-from-weather');
             fetchWeather(p2.lat, p2.lon, 'bp-to-weather');
         };
@@ -1296,41 +1302,42 @@
             document.getElementById('flight-map-controls').classList.remove('hidden');
             autoFollow = true;
             isLabelsVisible = true;
-            atcTriggered = { takeoff: false, cruise: false, landing: false };
+            FlightContext.sessionEnded = false;
+            FlightContext.atcTriggered = { takeoff: false, cruise: false, landing: false };
             
-            document.getElementById('hud-route').innerText = `${currentFlight.from} → ${currentFlight.to}`;
-            document.getElementById('hud-flight').innerText = currentFlight.num;
+            document.getElementById('hud-route').innerText = `${FlightContext.currentFlight.from} → ${FlightContext.currentFlight.to}`;
+            document.getElementById('hud-flight').innerText = FlightContext.currentFlight.num;
             
-            let p1 = getAirport(currentFlight.from);
+            let p1 = getAirport(FlightContext.currentFlight.from);
             
             let ac = AIRCRAFT_DB.find(a => a.id === selectedAircraftId) || AIRCRAFT_DB[0];
             let overlayInner = document.getElementById('plane-overlay-inner');
             overlayInner.innerHTML = ac.svg;
             document.getElementById('plane-overlay').classList.remove('hidden');
             
-            planeOverlayX = null;
-            planeOverlayY = null;
-            planeOverlayBearing = 0;
-            currentFlight.targetLat = p1.lat;
-            currentFlight.targetLon = p1.lon;
-            currentFlight.planeSpeedMultiplier = ac.speed / 840;
+            FlightContext.planeOverlayX = null;
+            FlightContext.planeOverlayY = null;
+            FlightContext.planeOverlayBearing = 0;
+            FlightContext.currentFlight.targetLat = p1.lat;
+            FlightContext.currentFlight.targetLon = p1.lon;
+            FlightContext.currentFlight.planeSpeedMultiplier = ac.speed / 840;
 
             startAudioEngine();
             
             let selectedZoom = 5;
-            if (currentFlight.min <= 20) selectedZoom = 5;
-            else if (currentFlight.min <= 30) selectedZoom = 4;
-            else if (currentFlight.min <= 45) selectedZoom = 3;
+            if (FlightContext.currentFlight.min <= 20) selectedZoom = 5;
+            else if (FlightContext.currentFlight.min <= 30) selectedZoom = 4;
+            else if (FlightContext.currentFlight.min <= 45) selectedZoom = 3;
             else selectedZoom = 2;
 
             map.setView([p1.lat, p1.lon], selectedZoom, {animate: false});
             
             setStoppableTimeout(() => {
-                sessionStartTime = Date.now();
-                totalPausedMs = 0;
-                pauseStartTime = 0;
-                isManuallyPaused = false;
-                currentFlight.totalMs = currentFlight.min * 60 * 1000;
+                FlightContext.sessionStartTime = Date.now();
+                FlightContext.totalPausedMs = 0;
+                FlightContext.pauseStartTime = 0;
+                FlightContext.isManuallyPaused = false;
+                FlightContext.currentFlight.totalMs = FlightContext.currentFlight.min * 60 * 1000;
                 
                 checkAndRequestNotification();
 
@@ -1338,29 +1345,39 @@
                     audioCtx.resume();
                 }
                 
-                atcTriggered.takeoff = true;
-                playATC(`Flight ${currentFlight.num}, cleared for takeoff.`);
+                FlightContext.atcTriggered.takeoff = true;
+                playATC(`Flight ${FlightContext.currentFlight.num}, cleared for takeoff.`);
                 
-                scheduleFlightDing(currentFlight.totalMs);
-                scheduleFlightCompletion(currentFlight.totalMs);
+                scheduleFlightDing(FlightContext.currentFlight.totalMs);
+                scheduleFlightCompletion(FlightContext.currentFlight.totalMs);
                 startAutoFollow();
-                rafId = requestAnimationFrame(updateHUD);
+                FlightContext.rafId = requestAnimationFrame(updateHUD);
             }, 100);
         }
 
         function updateHUD() {
-            let elapsed = Date.now() - sessionStartTime - totalPausedMs;
-            let p = Math.min(elapsed / currentFlight.totalMs, 1);
+            if (FlightContext.sessionEnded || !FlightContext.currentFlight) return;
+
+            let elapsed = Date.now() - FlightContext.sessionStartTime - FlightContext.totalPausedMs;
+            const remainingMs = (FlightContext.currentFlight.min * 60 * 1000) - elapsed;
+
+            if (remainingMs <= 0) {
+                FlightContext.sessionEnded = true;
+                handleLanding();
+                return; // Stop loop
+            }
+
+            let p = Math.min(elapsed / FlightContext.currentFlight.totalMs, 1);
             
             document.getElementById('hud-progress').style.width = (p*100) + "%";
             
-            let remS = Math.max(0, Math.ceil((currentFlight.totalMs - elapsed)/1000));
+            let remS = Math.max(0, Math.ceil((FlightContext.currentFlight.totalMs - elapsed)/1000));
             document.getElementById('hud-time').innerText = String(Math.floor(remS/60)).padStart(2,'0') + ":" + String(remS%60).padStart(2,'0');
 
             // Simulate Alt/Speed based on HUD progress
             let targetCrusingSpeedKts = (AIRCRAFT_DB.find(a => a.id === selectedAircraftId) || AIRCRAFT_DB[0]).speed / 1.852;
             
-            let takeoffDurationMs = Math.min(30000, currentFlight.totalMs * 0.1); 
+            let takeoffDurationMs = Math.min(30000, FlightContext.currentFlight.totalMs * 0.1); 
             let alt = 0, spd = 0;
 
             if (elapsed < takeoffDurationMs) { 
@@ -1386,14 +1403,14 @@
             document.getElementById('hud-speed').innerText = Math.floor(Math.max(0, spd)) + " kts";
 
             // Local time roughly matched to longitude
-            let toAp = getAirport(currentFlight.to);
+            let toAp = getAirport(FlightContext.currentFlight.to);
             let d = new Date();
             let hrOffset = toAp.lon / 15; 
             let localTime = new Date(d.getTime() + hrOffset*3600*1000);
             document.getElementById('hud-dest-time').innerText = localTime.toISOString().substr(11,5);
 
             // Plane visual speed matched to session duration
-            const visualFlightDurationMs = currentFlight.min * 60 * 1000;
+            const visualFlightDurationMs = FlightContext.currentFlight.min * 60 * 1000;
             let pVisual = Math.min(elapsed / visualFlightDurationMs, 1);
 
             let exactIdx = pVisual * (cachedFlightArc.length - 1);
@@ -1406,20 +1423,20 @@
             let lat = p1Coord[0] * (1 - f) + p2Coord[0] * f;
             let lon = p1Coord[1] * (1 - f) + p2Coord[1] * f;
 
-            currentFlight.targetLat = lat;
-            currentFlight.targetLon = lon;
+            FlightContext.currentFlight.targetLat = lat;
+            FlightContext.currentFlight.targetLon = lon;
 
             // CSS Overlay positioning
             let point = map.latLngToContainerPoint([lat, lon]);
             let targetX = point.x;
             let targetY = point.y;
             
-            if (planeOverlayX === null || isNaN(planeOverlayX)) {
-                planeOverlayX = targetX;
-                planeOverlayY = targetY;
+            if (FlightContext.planeOverlayX === null || isNaN(FlightContext.planeOverlayX)) {
+                FlightContext.planeOverlayX = targetX;
+                FlightContext.planeOverlayY = targetY;
             } else {
-                planeOverlayX += (targetX - planeOverlayX) * 0.15;
-                planeOverlayY += (targetY - planeOverlayY) * 0.15;
+                FlightContext.planeOverlayX += (targetX - FlightContext.planeOverlayX) * 0.15;
+                FlightContext.planeOverlayY += (targetY - FlightContext.planeOverlayY) * 0.15;
             }
 
             let poverlay = document.getElementById('plane-overlay');
@@ -1434,13 +1451,13 @@
                     let x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
                     let targetBearing = Math.atan2(y, x) * 180 / Math.PI;
 
-                    let diff = targetBearing - planeOverlayBearing;
+                    let diff = targetBearing - FlightContext.planeOverlayBearing;
                     if (diff > 180) diff -= 360;
                     if (diff < -180) diff += 360;
-                    planeOverlayBearing += diff * 0.15;
+                    FlightContext.planeOverlayBearing += diff * 0.15;
                 }
                 
-                poverlay.style.transform = `translate(${planeOverlayX}px, ${planeOverlayY}px) rotate(${planeOverlayBearing}deg)`;
+                poverlay.style.transform = `translate(${FlightContext.planeOverlayX}px, ${FlightContext.planeOverlayY}px) rotate(${FlightContext.planeOverlayBearing}deg)`;
                 
                 // Add bounding box checks for map overflow clipping if any
                 if (p > 0.1 && p < 0.9) {
@@ -1450,9 +1467,9 @@
                 }
             }
 
-            if (autoFollow && currentFlight && typeof currentFlight.targetLat !== 'undefined') {
+            if (autoFollow && FlightContext.currentFlight && typeof FlightContext.currentFlight.targetLat !== 'undefined') {
                 const currentCenter = map.getCenter();
-                const targetCenter = [currentFlight.targetLat, currentFlight.targetLon];
+                const targetCenter = [FlightContext.currentFlight.targetLat, FlightContext.currentFlight.targetLon];
                 const newLat = currentCenter.lat + (targetCenter[0] - currentCenter.lat) * 0.03;
                 const newLng = currentCenter.lng + (targetCenter[1] - currentCenter.lng) * 0.03;
                 map.setView([newLat, newLng], map.getZoom(), {animate: false});
@@ -1460,68 +1477,77 @@
 
             updateAmbientSound(p);
 
-            if (p > 0.1 && !atcTriggered.cruise) {
-                atcTriggered.cruise = true;
-                playATC(`Flight ${currentFlight.num}, reaching cruise altitude.`);
+            if (p > 0.1 && !FlightContext.atcTriggered.cruise) {
+                FlightContext.atcTriggered.cruise = true;
+                playATC(`Flight ${FlightContext.currentFlight.num}, reaching cruise altitude.`);
             }
-            if (p > 0.9 && !atcTriggered.landing) {
-                atcTriggered.landing = true;
-                playATC(`Flight ${currentFlight.num}, cleared for landing at ${currentFlight.to}.`);
+            if (p > 0.9 && !FlightContext.atcTriggered.landing) {
+                FlightContext.atcTriggered.landing = true;
+                playATC(`Flight ${FlightContext.currentFlight.num}, cleared for landing at ${FlightContext.currentFlight.to}.`);
             }
 
-            if (p >= 1) {
-                endFlight(true);
-            } else {
-                rafId = requestAnimationFrame(updateHUD);
-            }
+            FlightContext.rafId = requestAnimationFrame(updateHUD);
         }
 
         function endFlight(completed) {
-            if (rafId) cancelAnimationFrame(rafId);
-            clearAllTimeouts();
-            stopAudioEngine();
-            setPausedState(false); // Make sure pause overlay vanishes
-
-            saveFlightRecord(completed);
-
             if (completed) {
-                let toAp = getAirport(currentFlight.to);
-                
-                if (currentFlight.isUltra) {
-                    if(!isMuted) playUltraLandingSound();
-                    showView('view-ultra-arrival');
-                    
-                    let p1 = getAirport(currentFlight.from);
-                    let distMeters = map.distance([p1.lat, p1.lon], [toAp.lat, toAp.lon]);
-                    let distKm = Math.round(distMeters / 1000);
-                    let distMi = Math.round(distMeters / 1609.34);
-                    
-                    document.getElementById('ultra-distance').innerText = `${distKm.toLocaleString()} km (${distMi.toLocaleString()} miles)`;
-                    
-                    // Determine ocean message based roughly on from/to longitude differences
-                    let diffLon = Math.abs(p1.lon - toAp.lon);
-                    let msg = "You crossed the world";
-                    if (diffLon > 40 && diffLon < 130) msg = "You crossed the Atlantic"; // Rough approx
-                    else if (diffLon >= 130) msg = "You crossed the Pacific";
-                    document.getElementById('ultra-body-text').innerText = msg;
-                    
-                    animateSolari(toAp.name);
-                    
-                    // Add stamp logic in saveFlightRecord
-                } else {
-                    if(!isMuted) playLandingSound();
-                    showView('view-arrival');
-                    document.getElementById('arrival-dest').innerText = toAp.name;
-                }
+                handleLanding();
             } else {
+                if (FlightContext.rafId) cancelAnimationFrame(FlightContext.rafId);
+                clearAllTimeouts();
+                clearAutoFollow();
+                document.getElementById('plane-overlay').classList.add('hidden');
+                stopAudioEngine();
+                setPausedState(false);
+                saveFlightRecord(false);
                 setupRouteView();
                 mapMode = false;
                 document.getElementById('btn-map-mode').innerText = "Map Mode: OFF";
             }
         }
 
+        function handleLanding() {
+            FlightContext.sessionEnded = true;
+            if (FlightContext.rafId) cancelAnimationFrame(FlightContext.rafId);
+            clearAllTimeouts();
+            clearAutoFollow();
+            document.getElementById('plane-overlay').classList.add('hidden');
+            stopAudioEngine();
+            setPausedState(false);
+
+            saveFlightRecord(true);
+            updateProfileStats();
+
+            let toAp = getAirport(FlightContext.currentFlight.to);
+            if (FlightContext.currentFlight.isUltra) {
+                if(!isMuted) playUltraLandingSound();
+                showView('view-ultra-arrival');
+                
+                let p1 = getAirport(FlightContext.currentFlight.from);
+                let distMeters = map.distance([p1.lat, p1.lon], [toAp.lat, toAp.lon]);
+                let distKm = Math.round(distMeters / 1000);
+                let distMi = Math.round(distMeters / 1609.34);
+                
+                document.getElementById('ultra-distance').innerText = `${distKm.toLocaleString()} km (${distMi.toLocaleString()} miles)`;
+                
+                let diffLon = Math.abs(p1.lon - toAp.lon);
+                let msg = "You crossed the world";
+                if (diffLon > 40 && diffLon < 130) msg = "You crossed the Atlantic";
+                else if (diffLon >= 130) msg = "You crossed the Pacific";
+                document.getElementById('ultra-body-text').innerText = msg;
+                
+                animateSolari(toAp.name);
+            } else {
+                if(!isMuted) playLandingSound();
+                showView('view-arrival');
+                document.getElementById('arrival-dest').innerText = toAp.name;
+            }
+        }
+
 
         // SAVE DATA
+        const updateProfileStats = () => loadProfile();
+
         function saveFlightRecord(completed) {
             let data;
             try {
@@ -1537,28 +1563,28 @@
             let today = new Date().toISOString().split('T')[0];
             
             if (completed) {
-                data.hours += currentFlight.min / 60;
+                data.hours += FlightContext.currentFlight.min / 60;
                 data.streaks[today] = (data.streaks[today] || 0) + 1;
                 
                 if (data.currentChain.length === 0) {
-                    data.currentChain.push(currentFlight.from);
+                    data.currentChain.push(FlightContext.currentFlight.from);
                 }
-                data.currentChain.push(currentFlight.to);
+                data.currentChain.push(FlightContext.currentFlight.to);
                 
                 if (data.currentChain.length > data.longestChain.length) {
                     data.longestChain = [...data.currentChain];
                 }
 
-                if (currentFlight.isUltra && !data.stamps.includes(currentFlight.id)) {
-                    data.stamps.push(currentFlight.id);
+                if (FlightContext.currentFlight.isUltra && !data.stamps.includes(FlightContext.currentFlight.id)) {
+                    data.stamps.push(FlightContext.currentFlight.id);
                 }
             }
             
             data.history.unshift({
-                route: `${currentFlight.from}-${currentFlight.to}`,
+                route: `${FlightContext.currentFlight.from}-${FlightContext.currentFlight.to}`,
                 date: new Date().toISOString(),
-                min: currentFlight.min,
-                completed: completed ? "Completed" : (currentFlight.abortPercentage !== undefined ? `Aborted (${currentFlight.abortPercentage}%)` : "Cancelled")
+                min: FlightContext.currentFlight.min,
+                completed: completed ? "Completed" : (FlightContext.currentFlight.abortPercentage !== undefined ? `Aborted (${FlightContext.currentFlight.abortPercentage}%)` : "Cancelled")
             });
             if (data.history.length > 100) {
                 data.history = data.history.slice(0, 100);
@@ -1679,11 +1705,11 @@
         // BREAK TIMER
         function startBreak(mins) {
             showView('view-break');
-            breakEndTime = Date.now() + mins * 60 * 1000;
+            FlightContext.breakEndTime = Date.now() + mins * 60 * 1000;
             updateBreakHUD();
         }
         function updateBreakHUD() {
-            let rem = Math.max(0, breakEndTime - Date.now());
+            let rem = Math.max(0, FlightContext.breakEndTime - Date.now());
             if (document.getElementById('view-break').classList.contains('hidden')) return;
             
             let s = Math.ceil(rem/1000);
@@ -1732,10 +1758,10 @@
         }
 
         function updateAmbientSound(p) {
-            if (!ambientGain || !isAmbEnabled || isManuallyPaused) return;
+            if (!ambientGain || !isAmbEnabled || FlightContext.isManuallyPaused) return;
             
-            let elapsedSec = (Date.now() - sessionStartTime - totalPausedMs) / 1000;
-            let totalSec = currentFlight.totalMs / 1000;
+            let elapsedSec = (Date.now() - FlightContext.sessionStartTime - FlightContext.totalPausedMs) / 1000;
+            let totalSec = FlightContext.currentFlight.totalMs / 1000;
             let timeRemainingSec = totalSec - elapsedSec;
             
             let gainTarget = 0.04;
@@ -1843,7 +1869,7 @@
             setStoppableTimeout(() => {
                 if (document.hidden && "Notification" in window && Notification.permission === "granted") {
                     new Notification("Flight Arrived", {
-                        body: `Flight ${currentFlight.num} has arrived at ${currentFlight.to}.`,
+                        body: `Flight ${FlightContext.currentFlight.num} has arrived at ${FlightContext.currentFlight.to}.`,
                         icon: "✈️"
                     });
                 }
@@ -1876,7 +1902,7 @@
             
             playRadioStatic(0.2);
 
-            setTimeout(() => {
+            setStoppableTimeout(() => {
                 if(!isAtcEnabled) return;
                 const msg = new SpeechSynthesisUtterance(text);
                 msg.rate = 1.2;
@@ -2042,18 +2068,18 @@
             document.getElementById('btn-cancel').addEventListener('click', () => { setupRouteView(); });
             document.getElementById('btn-board').addEventListener('click', runChecklist);
             document.getElementById('btn-start-flight').addEventListener('click', startFlight);
-            document.getElementById('btn-pause').addEventListener('click', () => setPausedState(!isManuallyPaused));
+            document.getElementById('btn-pause').addEventListener('click', () => setPausedState(!FlightContext.isManuallyPaused));
             document.getElementById('btn-abort').addEventListener('click', () => { 
                 setPausedState(true);
                 showView('view-abort-confirm');
             });
             document.getElementById('btn-confirm-abort').addEventListener('click', () => {
                 let p = 0;
-                if (currentFlight && currentFlight.totalMs) {
-                    let elapsed = Date.now() - sessionStartTime - totalPausedMs;
-                    p = Math.min(elapsed / currentFlight.totalMs, 1);
+                if (FlightContext.currentFlight && FlightContext.currentFlight.totalMs) {
+                    let elapsed = Date.now() - FlightContext.sessionStartTime - FlightContext.totalPausedMs;
+                    p = Math.min(elapsed / FlightContext.currentFlight.totalMs, 1);
                 }
-                currentFlight.abortPercentage = Math.floor(p * 100);
+                FlightContext.currentFlight.abortPercentage = Math.floor(p * 100);
                 endFlight(false);
             });
             document.getElementById('btn-cancel-abort').addEventListener('click', () => {
@@ -2066,7 +2092,7 @@
             document.getElementById('btn-gate-rest').addEventListener('click', () => startBreak(10));
             document.getElementById('btn-hotel-layover').addEventListener('click', () => startBreak(20));
             document.getElementById('btn-ultra-skip').addEventListener('click', () => { setupRouteView(); });
-            document.getElementById('btn-end-break').addEventListener('click', () => { breakEndTime = 0; setupRouteView(); });
+            document.getElementById('btn-end-break').addEventListener('click', () => { FlightContext.breakEndTime = 0; setupRouteView(); });
             
             document.getElementById('btn-toggle-profile').addEventListener('click', () => {
                 let el = document.getElementById('profile-content');
