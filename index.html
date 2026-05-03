@@ -263,11 +263,49 @@
         <div id="floating-actions" class="hidden" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; gap: 10px; background: var(--panel-bg); padding: 10px 20px; border-radius: 8px; border: 1px solid var(--border); box-shadow: var(--glow);">
         </div>
 
-        <div style="text-align: center; margin-bottom: 10px;">
-            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.0.2</span></h1>
+        <div style="text-align: center; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="width: 24px;"></div>
+            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.0.4</span></h1>
+            <button id="btn-open-settings" style="background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 1.2em; padding: 0;" data-tooltip="Settings">⚙️</button>
         </div>
 
         <!-- Views -->
+        <div id="view-settings" class="hidden card view-panel">
+            <div class="flex-between" style="margin-bottom: 20px;">
+                <h2>Settings</h2>
+                <button class="btn" id="btn-close-settings" style="padding: 6px 12px; font-size: 0.8em;">Back</button>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+                <div>
+                    <label style="font-size:0.7em; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; display:block; margin-bottom:5px;">Units</label>
+                    <select id="setting-units" style="width: 100%; padding: 8px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); font-family: inherit;">
+                        <option value="metric">Metric (km/h, km, °C)</option>
+                        <option value="imperial">Imperial (kts, miles, °F)</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label style="font-size:0.7em; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; display:block; margin-bottom:5px;">Map Theme</label>
+                    <select id="setting-map-theme" style="width: 100%; padding: 8px; background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); font-family: inherit;">
+                        <option value="dark">Dark Matter (Default)</option>
+                        <option value="voyager">CartoDB Voyager</option>
+                        <option value="osm">OpenStreetMap</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label style="font-size:0.7em; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; display:block; margin-bottom:5px;">Ambient Volume</label>
+                    <input type="range" id="setting-vol-amb" min="0" max="100" value="100" style="width: 100%;">
+                </div>
+                
+                <div>
+                    <label style="font-size:0.7em; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; display:block; margin-bottom:5px;">ATC Volume</label>
+                    <input type="range" id="setting-vol-atc" min="0" max="100" value="100" style="width: 100%;">
+                </div>
+            </div>
+        </div>
+
         <div id="view-setup" class="card view-panel">
             <div class="flex-between">
                 <h2>Select Route</h2>
@@ -409,6 +447,13 @@
             <h2>Layover</h2>
             <div class="hud-value" id="break-time" style="font-size: 3em; margin: 20px 0;">05:00</div>
             <button class="btn" id="btn-end-break">End Break</button>
+        </div>
+
+        <div id="view-inflight-break" class="hidden card view-panel" style="text-align: center;">
+            <h2 style="color: var(--accent);">In-Flight Rest</h2>
+            <p style="font-size: 0.85em; opacity: 0.8; margin-top: 5px;">Pomodoro Break</p>
+            <div class="hud-value" id="inflight-break-time" style="font-size: 3em; margin: 20px 0;">05:00</div>
+            <button class="btn" id="btn-end-inflight-break" style="width: 100%;">Resume Flight</button>
         </div>
 
         <div class="card">
@@ -700,6 +745,12 @@
         let humOsc1 = null, humOsc2 = null, pinkNoise = null, ambientGain = null, lfoOsc = null, lfoGain = null;
         let isAtcEnabled = localStorage.getItem('isAtcEnabled') !== 'false';
         let isAmbEnabled = localStorage.getItem('isAmbEnabled') !== 'false';
+        
+        let unitPref = localStorage.getItem('unitPref') || 'metric';
+        let mapTheme = localStorage.getItem('mapTheme') || 'satellite';
+        let volAmb = parseInt(localStorage.getItem('volAmb') || '100');
+        let volAtc = parseInt(localStorage.getItem('volAtc') || '100');
+
         let sessionTimer = null;
 
         function setStoppableTimeout(fn, delay) {
@@ -761,13 +812,13 @@
                 if (FlightContext.pauseStartTime === 0) FlightContext.pauseStartTime = Date.now();
                 if (ambientGain) ambientGain.gain.setValueAtTime(0, audioCtx.currentTime);
                 if (pauseBtn) pauseBtn.innerHTML = "▶ Resume";
-                if (overlay) overlay.classList.remove('hidden');
+                if (overlay && !FlightContext.activeInFlightBreak) overlay.classList.remove('hidden');
             } else {
                 if (FlightContext.pauseStartTime > 0) {
                     FlightContext.totalPausedMs += (Date.now() - FlightContext.pauseStartTime);
                     FlightContext.pauseStartTime = 0;
                 }
-                if (ambientGain && isAmbEnabled) ambientGain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+                if (ambientGain && isAmbEnabled) ambientGain.gain.setValueAtTime(0.04 * (volAmb / 100), audioCtx.currentTime);
                 if (pauseBtn) pauseBtn.innerHTML = "⏸ Pause";
                 if (overlay) overlay.classList.add('hidden');
                 
@@ -776,6 +827,36 @@
                     FlightContext.rafId = requestAnimationFrame(updateHUD);
                 }
             }
+        }
+
+        function triggerInFlightBreak() {
+            FlightContext.activeInFlightBreak = true;
+            setPausedState(true);
+            showView('view-inflight-break');
+            
+            let overlay = document.getElementById('map-overlay-paused');
+            if (overlay) overlay.classList.add('hidden');
+            
+            let breakTimeMs = 5 * 60 * 1000;
+            const startTime = Date.now();
+            const el = document.getElementById('inflight-break-time');
+
+            document.getElementById('btn-end-inflight-break').style.background = '';
+            document.getElementById('btn-end-inflight-break').style.color = '';
+
+            let timerId = setInterval(() => {
+                let remaining = breakTimeMs - (Date.now() - startTime);
+                if (remaining <= 0) {
+                    el.innerText = "00:00";
+                    document.getElementById('btn-end-inflight-break').style.background = 'var(--accent)';
+                    document.getElementById('btn-end-inflight-break').style.color = '#000';
+                } else {
+                    let mins = Math.floor(remaining / 60000);
+                    let secs = Math.floor((remaining % 60000) / 1000);
+                    el.innerText = String(mins).padStart(2, '0') + ":" + String(secs).padStart(2, '0');
+                }
+            }, 1000);
+            FlightContext.activeTimeouts.push(timerId);
         }
 
         function checkAndRequestNotification() {
@@ -808,6 +889,15 @@
 
         // INIT
         function init() {
+            let elUnits = document.getElementById('setting-units');
+            if (elUnits) elUnits.value = unitPref;
+            let elTheme = document.getElementById('setting-map-theme');
+            if (elTheme) elTheme.value = mapTheme;
+            let elVolAmb = document.getElementById('setting-vol-amb');
+            if (elVolAmb) elVolAmb.value = volAmb;
+            let elVolAtc = document.getElementById('setting-vol-atc');
+            if (elVolAtc) elVolAtc.value = volAtc;
+            
             setupRouteView();
             loadProfile();
             attachEvents();
@@ -821,8 +911,16 @@
                 document.getElementById('map').innerHTML = ""; 
             }
             map = L.map('map', {zoomControl: false}).setView([20, 0], 2);
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: 'Tiles &copy; Esri'
+            
+            let tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+            let attrib = 'Tiles &copy; Esri';
+            if (mapTheme === 'dark') { tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'; attrib = '&copy; <a href="https://carto.com/">Carto</a>'; }
+            if (mapTheme === 'voyager') { tileUrl = 'https://{s}.basemaps.cartocdn.com/voyager/{z}/{x}/{y}{r}.png'; attrib = '&copy; <a href="https://carto.com/">Carto</a>'; }
+            if (mapTheme === 'osm') { tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'; attrib = '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'; }
+            
+            L.tileLayer(tileUrl, {
+                attribution: attrib,
+                maxZoom: 18
             }).addTo(map);
 
             // Re-append our absolute overlays back into the map container
@@ -832,15 +930,24 @@
             let mControls = document.getElementById('flight-map-controls');
             if (mControls) document.getElementById('map').appendChild(mControls);
 
-            // Add labels layer
-            map.createPane('labels');
-            map.getPane('labels').style.zIndex = 450;
-            map.getPane('labels').style.pointerEvents = 'none';
-            labelsLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
-                pane: 'labels'
-            });
-            if (isLabelsVisible) {
-                labelsLayer.addTo(map);
+            let mPaused = document.getElementById('map-overlay-paused');
+            if (mPaused) document.getElementById('map').appendChild(mPaused);
+
+            // Add labels layer for satellite
+            if (mapTheme === 'satellite') {
+                map.createPane('labels');
+                map.getPane('labels').style.zIndex = 450;
+                map.getPane('labels').style.pointerEvents = 'none';
+                labelsLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
+                    pane: 'labels'
+                });
+                if (isLabelsVisible) {
+                    labelsLayer.addTo(map);
+                }
+            } else {
+                labelsLayer = null;
+                let btnLbl = document.getElementById('btn-map-labels');
+                if (btnLbl) btnLbl.style.display = 'none';
             }
 
             map.on('dragstart', () => { autoFollow = false; clearAutoFollow(); });
@@ -1294,7 +1401,7 @@
         }
 
         function showView(id) {
-            ['view-setup', 'view-aircraft-select', 'view-boarding-pass', 'view-checklist', 'view-hud', 'view-arrival', 'view-break', 'view-ultra-arrival', 'view-abort-confirm'].forEach(v => {
+            ['view-setup', 'view-settings', 'view-inflight-break', 'view-aircraft-select', 'view-boarding-pass', 'view-checklist', 'view-hud', 'view-arrival', 'view-break', 'view-ultra-arrival', 'view-abort-confirm'].forEach(v => {
                 let el = document.getElementById(v);
                 if (el) el.classList.add('hidden');
             });
@@ -1375,8 +1482,21 @@
                 FlightContext.totalPausedMs = 0;
                 FlightContext.pauseStartTime = 0;
                 FlightContext.isManuallyPaused = false;
+                FlightContext.activeInFlightBreak = false;
                 FlightContext.currentFlight.totalMs = FlightContext.currentFlight.min * 60 * 1000;
                 
+                FlightContext.inFlightBreaks = [];
+                let flightMin = FlightContext.currentFlight.min;
+                if (flightMin >= 60) {
+                    let numBreaks = FlightContext.currentFlight.isUltra ? 4 : 2;
+                    for (let i = 1; i <= numBreaks; i++) {
+                        FlightContext.inFlightBreaks.push({
+                            progressThreshold: i / (numBreaks + 1),
+                            completed: false
+                        });
+                    }
+                }
+
                 checkAndRequestNotification();
 
                 if (audioCtx && audioCtx.state === 'suspended') {
@@ -1406,6 +1526,15 @@
             }
 
             let p = Math.min(elapsed / FlightContext.currentFlight.totalMs, 1);
+            
+            if (FlightContext.inFlightBreaks) {
+                let pendingBreak = FlightContext.inFlightBreaks.find(b => !b.completed && p >= b.progressThreshold);
+                if (pendingBreak) {
+                    pendingBreak.completed = true;
+                    triggerInFlightBreak();
+                    return;
+                }
+            }
             
             document.getElementById('hud-progress').style.width = (p*100) + "%";
             
@@ -1437,8 +1566,16 @@
 
             if(p >= 1) { alt = 0; spd = 0; }
 
-            document.getElementById('hud-alt').innerText = Math.floor(Math.max(0, alt)).toLocaleString() + " ft";
-            document.getElementById('hud-speed').innerText = Math.floor(Math.max(0, spd)) + " kts";
+            let displayAlt = Math.floor(Math.max(0, alt));
+            let displaySpd = Math.floor(Math.max(0, spd));
+
+            if (unitPref === 'metric') {
+                document.getElementById('hud-alt').innerText = Math.floor(displayAlt / 3.28084).toLocaleString() + " m";
+                document.getElementById('hud-speed').innerText = Math.floor(displaySpd * 1.852) + " km/h";
+            } else {
+                document.getElementById('hud-alt').innerText = displayAlt.toLocaleString() + " ft";
+                document.getElementById('hud-speed').innerText = displaySpd + " kts";
+            }
 
             // Local time roughly matched to longitude
             let toAp = getAirport(FlightContext.currentFlight.to);
@@ -1549,6 +1686,10 @@
             if (FlightContext.rafId) cancelAnimationFrame(FlightContext.rafId);
             clearAllTimeouts();
             clearAutoFollow();
+            
+            document.getElementById('hud-progress').style.width = "100%";
+            document.getElementById('hud-time').innerText = "00:00";
+            
             document.getElementById('plane-overlay').classList.add('hidden');
             stopAudioEngine();
             setPausedState(false);
@@ -1558,7 +1699,7 @@
 
             let toAp = getAirport(FlightContext.currentFlight.to);
             if (FlightContext.currentFlight.isUltra) {
-                if(!isMuted) playUltraLandingSound();
+                playUltraLandingSound();
                 showView('view-ultra-arrival');
                 
                 let p1 = getAirport(FlightContext.currentFlight.from);
@@ -1576,7 +1717,7 @@
                 
                 animateSolari(toAp.name);
             } else {
-                if(!isMuted) playLandingSound();
+                playLandingSound();
                 showView('view-arrival');
                 document.getElementById('arrival-dest').innerText = toAp.name;
             }
@@ -1819,6 +1960,8 @@
                 freqTarget = 85;
             }
             
+            gainTarget *= (volAmb / 100);
+            
             if(humOsc1) humOsc1.frequency.setTargetAtTime(freqTarget, audioCtx.currentTime, 0.1);
             if(humOsc2) humOsc2.frequency.setTargetAtTime(freqTarget + 3, audioCtx.currentTime, 0.1);
             if(ambientGain) ambientGain.gain.setTargetAtTime(gainTarget, audioCtx.currentTime, 0.5);
@@ -1893,8 +2036,8 @@
                     osc.frequency.setValueAtTime(880, audioCtx.currentTime);
                     osc.frequency.setValueAtTime(1100, audioCtx.currentTime + 0.3);
                     g.gain.setValueAtTime(0, audioCtx.currentTime);
-                    g.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 0.1);
-                    g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+                    g.gain.linearRampToValueAtTime(0.5 * (volAtc / 100), audioCtx.currentTime + 0.1);
+                    g.gain.exponentialRampToValueAtTime(0.01 * (volAtc / 100), audioCtx.currentTime + 1.5);
                     osc.connect(g);
                     g.connect(audioCtx.destination);
                     osc.start();
@@ -1928,7 +2071,7 @@
              bandpass.type = 'bandpass';
              bandpass.frequency.value = 1000;
              const gain = audioCtx.createGain();
-             gain.gain.value = 0.05;
+             gain.gain.value = 0.05 * (volAtc / 100);
              noiseSource.connect(bandpass);
              bandpass.connect(gain);
              gain.connect(audioCtx.destination);
@@ -1945,6 +2088,7 @@
                 const msg = new SpeechSynthesisUtterance(text);
                 msg.rate = 1.2;
                 msg.pitch = 0.8;
+                msg.volume = (volAtc / 100);
                 let voices = window.speechSynthesis.getVoices();
                 if (voices.length > 0) {
                     msg.voice = voices.find(v => v.lang.includes('en-')) || voices[0];
@@ -1963,8 +2107,8 @@
             let g = audioCtx.createGain();
             osc.frequency.setValueAtTime(150, audioCtx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 3);
-            g.gain.setValueAtTime(0.5, audioCtx.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 3);
+            g.gain.setValueAtTime(0.5 * (volAmb / 100), audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01 * (volAmb / 100), audioCtx.currentTime + 3);
             osc.connect(g);
             g.connect(audioCtx.destination);
             osc.start();
@@ -1976,8 +2120,8 @@
             let gainNode = audioCtx.createGain();
             gainNode.connect(audioCtx.destination);
             gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-            gainNode.gain.linearRampToValueAtTime(0.4, audioCtx.currentTime + 0.1);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 4);
+            gainNode.gain.linearRampToValueAtTime(0.4 * (volAmb / 100), audioCtx.currentTime + 0.1);
+            gainNode.gain.exponentialRampToValueAtTime(0.01 * (volAmb / 100), audioCtx.currentTime + 4);
 
             let frequencies = [261.63, 329.63, 392.00, 523.25]; // C major chord
             frequencies.forEach((freq, index) => {
@@ -2108,6 +2252,7 @@
             document.getElementById('btn-start-flight').addEventListener('click', startFlight);
             document.getElementById('btn-pause').addEventListener('click', () => setPausedState(!FlightContext.isManuallyPaused));
             document.getElementById('btn-abort').addEventListener('click', () => { 
+                if (FlightContext.sessionEnded) return;
                 setPausedState(true);
                 showView('view-abort-confirm');
             });
@@ -2131,6 +2276,13 @@
             document.getElementById('btn-hotel-layover').addEventListener('click', () => startBreak(20));
             document.getElementById('btn-ultra-skip').addEventListener('click', () => { setupRouteView(); });
             document.getElementById('btn-end-break').addEventListener('click', () => { FlightContext.breakEndTime = 0; setupRouteView(); });
+            document.getElementById('btn-end-inflight-break').addEventListener('click', () => {
+                FlightContext.activeTimeouts.forEach(t => clearInterval(t));
+                FlightContext.activeTimeouts = [];
+                FlightContext.activeInFlightBreak = false;
+                showView('view-hud');
+                setPausedState(false);
+            });
             
             document.getElementById('btn-toggle-profile').addEventListener('click', () => {
                 let el = document.getElementById('profile-content');
@@ -2150,6 +2302,28 @@
                 let endY = e.changedTouches[0].clientY;
                 if (startTouchY - endY > 30) dashboard.classList.add('expanded');
                 else if (endY - startTouchY > 30) dashboard.classList.remove('expanded');
+            });
+
+            // Settings events
+            document.getElementById('btn-open-settings').addEventListener('click', () => { showView('view-settings'); });
+            document.getElementById('btn-close-settings').addEventListener('click', () => { showView('view-setup'); });
+            
+            document.getElementById('setting-units').addEventListener('change', (e) => { 
+                unitPref = e.target.value; 
+                localStorage.setItem('unitPref', unitPref);
+            });
+            document.getElementById('setting-map-theme').addEventListener('change', (e) => { 
+                mapTheme = e.target.value; 
+                localStorage.setItem('mapTheme', mapTheme);
+                initMap(); // reload map
+            });
+            document.getElementById('setting-vol-amb').addEventListener('input', (e) => {
+                volAmb = parseInt(e.target.value);
+                localStorage.setItem('volAmb', volAmb);
+            });
+            document.getElementById('setting-vol-atc').addEventListener('input', (e) => {
+                volAtc = parseInt(e.target.value);
+                localStorage.setItem('volAtc', volAtc);
             });
         }
 
