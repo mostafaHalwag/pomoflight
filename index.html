@@ -264,7 +264,7 @@
         </div>
 
         <div style="text-align: center; margin-bottom: 10px;">
-            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.1.3</span></h1>
+            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.1.5</span></h1>
         </div>
 
         <!-- Views -->
@@ -614,6 +614,9 @@
             { code: "YEG", name: "Edmonton Intl", lat: 53.3097, lon: -113.5797, city: "Edmonton", country: "Canada", region: "Americas" },
             { code: "YYC", name: "Calgary Intl", lat: 51.1139, lon: -114.0195, city: "Calgary", country: "Canada", region: "Americas" },
 
+            { code: "ATH", name: "Athens International", lat: 37.9364, lon: 23.9445, city: "Athens", country: "Greece", region: "Europe" },
+            { code: "LIS", name: "Lisbon Portela", lat: 38.7742, lon: -9.1342, city: "Lisbon", country: "Portugal", region: "Europe" },
+
             // New Pacific Islands Airports
             { code: "NAN", name: "Nadi Intl", lat: -17.7553, lon: 177.4430, city: "Nadi", country: "Fiji", region: "Oceania" },
             { code: "PPT", name: "Faa'a Intl", lat: -17.5539, lon: -149.6074, city: "Tahiti", country: "French Polynesia", region: "Oceania" },
@@ -810,7 +813,8 @@
                 if (pauseBtn) pauseBtn.innerHTML = "⏸ Pause";
                 if (overlay) overlay.classList.add('hidden');
                 
-                if (FlightContext.currentFlight && !document.getElementById('view-hud').classList.contains('hidden')) {
+                if (FlightContext.currentFlight && !document.getElementById('view-hud').classList.contains('hidden') && !FlightContext.sessionEnded) {
+                    if (FlightContext.rafId) cancelAnimationFrame(FlightContext.rafId);
                     if (autoFollow) startAutoFollow();
                     FlightContext.rafId = requestAnimationFrame(updateHUD);
                 }
@@ -832,7 +836,7 @@
                 }
             } else {
                 // Tab became visible
-                if (!FlightContext.isManuallyPaused && FlightContext.currentFlight && !document.getElementById('view-hud').classList.contains('hidden')) {
+                if (!FlightContext.isManuallyPaused && FlightContext.currentFlight && !document.getElementById('view-hud').classList.contains('hidden') && !FlightContext.sessionEnded) {
                     // check if session should have ended
                     let elapsed = Date.now() - FlightContext.sessionStartTime - FlightContext.totalPausedMs;
                     if (elapsed >= FlightContext.currentFlight.totalMs) {
@@ -1160,11 +1164,17 @@
         }
 
         function selectRoute(route) {
+            let p1 = getAirport(route.from);
+            let p2 = getAirport(route.to);
+            
+            if (!p1 || !p2) {
+                console.error("Invalid route in selectRoute:", route);
+                return;
+            }
+
             FlightContext.currentFlight = { ...route, num: "FT-" + Math.floor(Math.random()*900 + 100) };
             
             resetMap();
-            let p1 = getAirport(route.from);
-            let p2 = getAirport(route.to);
             
             L.marker([p1.lat, p1.lon]).addTo(map).bindTooltip(`${p1.code} - ${p1.name}`, {permanent: true, direction: 'top', className: 'airport-tooltip'});
             L.marker([p2.lat, p2.lon]).addTo(map).bindTooltip(`${p2.code} - ${p2.name}`, {permanent: true, direction: 'top', className: 'airport-tooltip'});
@@ -1375,8 +1385,15 @@
             autoFollow = true;
             isLabelsVisible = true;
             FlightContext.sessionEnded = false;
-            document.getElementById('btn-abort').disabled = false;
+            FlightContext.planeOverlayX = null;
+            FlightContext.planeOverlayY = null;
+            FlightContext.planeOverlayBearing = 0;
+            FlightContext.rafId = null;
+            FlightContext.totalPausedMs = 0;
+            FlightContext.pauseStartTime = 0;
+            FlightContext.isManuallyPaused = false;
             FlightContext.atcTriggered = { takeoff: false, cruise: false, landing: false };
+            document.getElementById('btn-abort').disabled = false;
             
             document.getElementById('hud-progress').style.width = "0%";
             document.getElementById('hud-time').innerText = "--:--";
@@ -1585,6 +1602,7 @@
         }
 
         function endFlight(completed) {
+            FlightContext.sessionEnded = true;
             if (completed) {
                 handleLanding();
             } else {
@@ -1861,7 +1879,10 @@
             updateBreakHUD();
         }
 
+        let breakHudTimer = null;
         function finishBreak() {
+            if (breakHudTimer) clearTimeout(breakHudTimer);
+            breakHudTimer = null;
             if (document.getElementById('view-break').classList.contains('hidden')) return;
             document.getElementById('fuel-gauge').classList.add('hidden');
             document.getElementById('break-mandatory-text').classList.add('hidden');
@@ -1902,8 +1923,9 @@
                 document.getElementById('btn-end-break').style.pointerEvents = 'auto';
             }
             
+            if (breakHudTimer) clearTimeout(breakHudTimer);
             if (s > 0) {
-                setTimeout(updateBreakHUD, 1000);
+                breakHudTimer = setTimeout(updateBreakHUD, 1000);
             } else {
                 finishBreak();
             }
