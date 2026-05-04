@@ -264,7 +264,7 @@
         </div>
 
         <div style="text-align: center; margin-bottom: 10px;">
-            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.1.5</span></h1>
+            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.1.6</span></h1>
         </div>
 
         <!-- Views -->
@@ -302,7 +302,8 @@
                 <div id="live-tier" style="font-size: 1.2em; font-weight: bold; margin-bottom: 5px; color: var(--accent);">Medium Haul</div>
                 <div style="font-size: 0.9em; opacity: 0.8; margin-bottom: 10px;">
                     Distance: <span id="live-distance">0 km (0 miles)</span><br>
-                    Est. Duration: <span id="live-duration" style="color: #fff; font-weight: bold;">--</span>
+                    Est. Duration: <span id="live-duration" style="color: #fff; font-weight: bold;">--</span><br>
+                    <span id="live-breaks" style="color: var(--accent); display: none;"></span>
                 </div>
                 <button class="btn" id="btn-confirm-route" style="width: 100%;">Confirm Route</button>
             </div>
@@ -337,7 +338,7 @@
                     <div><div class="bp-label">To</div><div class="bp-val" id="bp-to">LHR</div><div id="bp-to-weather" style="font-size:0.8em; color:var(--text-dim); margin-top:4px;">N/A</div></div>
                     <div style="grid-column: 1 / -1;"><div class="bp-label">Distance</div><div id="bp-distance" style="font-size:1.1em; opacity: 0.9;">--</div></div>
                     <div style="grid-column: 1 / -1;"><div class="bp-label">Aircraft</div><div id="bp-aircraft" style="font-size:1.1em; opacity: 0.9;">--</div></div>
-                    <div><div class="bp-label">Duration</div><div id="bp-duration" style="font-weight:bold;">45m</div></div>
+                    <div><div class="bp-label">Duration</div><div id="bp-duration" style="font-weight:bold;">45m</div><div id="bp-breaks" style="font-size: 0.7em; color: var(--accent); margin-top: 5px; display: none;">Mid-flight break</div></div>
                     <div><div class="bp-label">Gate</div><div style="font-weight:bold;"><span id="bp-gate">A</span></div></div>
                 </div>
                 <div class="bp-footer">
@@ -914,13 +915,21 @@
             else if (roundedMin <= 120) { tierLabel = "Ultra Long Haul"; color = "#f43f5e"; } // rose
             else { tierLabel = "Event Horizon ✦"; color = "#fbbf24"; isUltraSpecial = true; } // gold
             
+            let numBreaks = 0;
+            let breakDuration = 5;
+            if (roundedMin > 40) {
+                numBreaks = Math.floor((roundedMin - 1) / 40);
+            }
+
             return {
                 min: roundedMin,
                 tierLabel,
                 color,
                 distKm,
                 distMi: distKm / 1.60934,
-                isUltra: isUltraSpecial
+                isUltra: isUltraSpecial,
+                numBreaks: numBreaks,
+                breakDuration: breakDuration
             };
         }
 
@@ -973,12 +982,22 @@
                 }
                 
                 document.getElementById('live-distance').innerText = `${Math.round(details.distKm).toLocaleString()} km (${Math.round(details.distMi).toLocaleString()} miles)`;
-                document.getElementById('live-duration').innerText = `${details.min}m`;
+                let hr = Math.floor(details.min / 60);
+                let mins = details.min % 60;
+                document.getElementById('live-duration').innerText = hr + "h " + mins + "m";
                 
+                let breakEl = document.getElementById('live-breaks');
+                if (details.numBreaks > 0) {
+                    breakEl.style.display = 'inline';
+                    breakEl.innerText = `Includes ${details.numBreaks} mid-flight layover${details.numBreaks > 1 ? 's' : ''} (${details.breakDuration}m each)`;
+                } else {
+                    breakEl.style.display = 'none';
+                }
+
                 // Keep the confirm button logic here:
                 let confirmBtn = document.getElementById('btn-confirm-route');
                 confirmBtn.onclick = () => {
-                    selectRoute({ from: p1.code, to: p2.code, min: details.min, isUltra: details.isUltra, distKm: details.distKm, distMi: details.distMi });
+                    selectRoute({ from: p1.code, to: p2.code, min: details.min, isUltra: details.isUltra, distKm: details.distKm, distMi: details.distMi, numBreaks: details.numBreaks, breakDuration: details.breakDuration });
                 };
             } else {
                 document.getElementById('live-route-stats').classList.add('hidden');
@@ -1085,7 +1104,7 @@
                  let p2 = getAirport(r.to);
                  let details = calculateFlightDetails(p1.lat, p1.lon, p2.lat, p2.lon);
                  
-                 let fullRoute = { ...r, min: details.min, isUltra: details.isUltra, distKm: details.distKm, distMi: details.distMi };
+                 let fullRoute = { ...r, min: details.min, isUltra: details.isUltra, distKm: details.distKm, distMi: details.distMi, numBreaks: details.numBreaks, breakDuration: details.breakDuration };
                  
                  if (!grouped[details.tierLabel]) grouped[details.tierLabel] = [];
                  grouped[details.tierLabel].push(fullRoute);
@@ -1130,7 +1149,8 @@
                         } else if (tier === "Ultra Long Haul") {
                             div.style.borderLeft = "3px solid #f43f5e";
                         }
-                        div.innerHTML = `<span>${fromName} (${r.from}) ✈️ ${toName} (${r.to})</span>`;
+                        let breakInfo = r.numBreaks > 0 ? ` <span style="font-size: 0.8em; color: var(--accent); opacity: 0.8;">(has ${r.numBreaks} ${r.numBreaks > 1 ? 'breaks' : 'break'}, ${r.breakDuration}m each)</span>` : '';
+                        div.innerHTML = `<span>${fromName} (${r.from}) ✈️ ${toName} (${r.to})${breakInfo}</span>`;
                         div.onclick = () => selectRoute(r);
                         list.appendChild(div);
                     });
@@ -1303,6 +1323,14 @@
             }
             
             document.getElementById('bp-duration').innerText = FlightContext.currentFlight.min + "m";
+            
+            let bpBreaks = document.getElementById('bp-breaks');
+            if (FlightContext.currentFlight.numBreaks > 0) {
+                bpBreaks.style.display = 'block';
+                bpBreaks.innerText = FlightContext.currentFlight.numBreaks + " Layover" + (FlightContext.currentFlight.numBreaks > 1 ? 's' : '') + " (" + FlightContext.currentFlight.breakDuration + "m each)";
+            } else {
+                bpBreaks.style.display = 'none';
+            }
             document.getElementById('bp-gate').innerText = "G" + Math.floor(Math.random()*20+1);
             
             let p1 = getAirport(FlightContext.currentFlight.from);
@@ -1438,8 +1466,12 @@
                 FlightContext.currentFlight.totalMs = FlightContext.currentFlight.min * 60 * 1000;
                 
                 FlightContext.pendingBreaks = [];
-                if (FlightContext.currentFlight.min >= 90) {
-                    FlightContext.pendingBreaks.push(FlightContext.currentFlight.totalMs * 0.5);
+                if (FlightContext.currentFlight.numBreaks && FlightContext.currentFlight.numBreaks > 0) {
+                    let breaks = FlightContext.currentFlight.numBreaks;
+                    let interval = FlightContext.currentFlight.totalMs / (breaks + 1);
+                    for (let i = 1; i <= breaks; i++) {
+                        FlightContext.pendingBreaks.push(interval * i);
+                    }
                 }
                 
                 checkAndRequestNotification();
