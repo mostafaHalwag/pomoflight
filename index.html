@@ -31,7 +31,8 @@
             display: flex; flex-direction: row; height: 100vh;
             text-transform: uppercase; overflow: hidden;
         }
-        #map { flex: 2; height: 100vh; border-right: 1px solid var(--border); z-index: 1; background: #020406; position: relative; }
+        #map-wrap { flex: 2; height: 100vh; border-right: 1px solid var(--border); z-index: 1; background: #020406; position: relative; }
+        #map { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 1; }
         #dashboard { 
             flex: 1; min-width: 350px; max-width: 450px; padding: 24px; 
             display: flex; flex-direction: column; gap: 24px; 
@@ -190,7 +191,7 @@
 
         @media (max-width: 768px) {
             body { flex-direction: column; }
-            #map { flex: 1; height: 100vh; border-right: none; }
+            #map-wrap { flex: 1; height: 100vh; border-right: none; }
             #dashboard { 
                 position: fixed; bottom: 0; left: 0; right: 0; width: 100%; 
                 max-width: 100%; min-width: 100%; 
@@ -236,24 +237,23 @@
         <button id="btn-toggle-amb" style="background: transparent; color: var(--text-main); border: none; padding: 8px 16px; cursor: pointer; font-weight: bold; transition: all 0.2s; text-shadow: var(--glow-accent);">AMB</button>
     </div>
 
-    <div id="map">
-        <!-- Plane overlay decoupled from Leaflet layer -->
-        <div id="plane-overlay" class="hidden" style="position: absolute; pointer-events: none; z-index: 1000; left: 0; top: 0; width: 0; height: 0;">
-            <div id="plane-overlay-inner" style="position: absolute; left: -24px; top: -24px; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6));"></div>
+    <div id="map-wrap">
+        <div id="map"></div>
+        <div id="plane-overlay" class="hidden" style="position: absolute; pointer-events: none; z-index: 1000; left: 0; top: 0; width: 48px; height: 48px; transform-origin: center center;">
+            <div id="plane-overlay-inner" style="position: absolute; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6));"></div>
         </div>
         <div id="dashboard-toggle-btn" style="position: absolute; right: -1px; top: 50%; transform: translateY(-50%); width: 22px; height: 60px; background: var(--panel-bg); border: 1px solid var(--border); border-right: none; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1000; transition: transform 0.3s ease; border-radius: 4px 0 0 4px; color: var(--text-main);">▶</div>
-    </div>
-    <div id="flight-map-controls" class="hidden" style="position: absolute; left: 12px; top: 12px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; background: var(--panel-bg); padding: 10px; border: 1px solid var(--border); box-shadow: var(--glow);">
-        <button class="map-control-btn" id="btn-map-zoomin" data-tooltip="Zoom In"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg></button>
-        <button class="map-control-btn" id="btn-map-zoomout" data-tooltip="Zoom Out"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg></button>
-        <button class="map-control-btn active" id="btn-map-recenter" data-tooltip="Re-center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg></button>
-        <button class="map-control-btn" id="btn-map-overview" data-tooltip="Overview"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></button>
-        <button class="map-control-btn active" id="btn-map-labels" data-tooltip="Labels"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg></button>
-    </div>
-    <div id="map-overlay-paused" class="hidden" style="position: absolute; left: 0; top: 0; bottom: 0; right: max(350px, 0px); width: 66.66%; height: 100vh; background: rgba(0,0,0,0.6); z-index: 999; display: flex; align-items: center; justify-content: center; font-size: 3em; font-weight: bold; color: var(--accent); text-shadow: 0 0 10px var(--accent); flex-direction: column; pointer-events: none;">
-
-        <div style="font-size: 2em; margin-bottom: 20px;">⏸</div>
-        <div>PAUSED</div>
+        <div id="flight-map-controls" class="hidden" style="position: absolute; left: 12px; top: 12px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; background: var(--panel-bg); padding: 10px; border: 1px solid var(--border); box-shadow: var(--glow);">
+            <button class="map-control-btn" id="btn-map-zoomin" data-tooltip="Zoom In"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg></button>
+            <button class="map-control-btn" id="btn-map-zoomout" data-tooltip="Zoom Out"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg></button>
+            <button class="map-control-btn active" id="btn-map-recenter" data-tooltip="Re-center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg></button>
+            <button class="map-control-btn" id="btn-map-overview" data-tooltip="Overview"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></button>
+            <button class="map-control-btn active" id="btn-map-labels" data-tooltip="Labels"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg></button>
+        </div>
+        <div id="map-overlay-paused" class="hidden" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 999; display: flex; align-items: center; justify-content: center; font-size: 3em; font-weight: bold; color: var(--accent); text-shadow: 0 0 10px var(--accent); flex-direction: column; pointer-events: none;">
+            <div style="font-size: 2em; margin-bottom: 20px;">⏸</div>
+            <div>PAUSED</div>
+        </div>
     </div>
     
     <div id="dashboard">
@@ -264,7 +264,7 @@
         </div>
 
         <div style="text-align: center; margin-bottom: 10px;">
-            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.0.2</span></h1>
+            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.1.0</span></h1>
         </div>
 
         <!-- Views -->
@@ -711,9 +711,14 @@
         function clearAllTimeouts() {
             FlightContext.activeTimeouts.forEach(clearTimeout);
             FlightContext.activeTimeouts = [];
+            if (typeof backgroundLoopInterval !== 'undefined' && backgroundLoopInterval) {
+                clearInterval(backgroundLoopInterval);
+                backgroundLoopInterval = null;
+            }
         }
 
         let cachedFlightArc = [];
+        let backgroundLoopInterval = null;
         
         let autoFollow = true;
         let autoFollowInterval = null;
@@ -825,13 +830,6 @@
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri'
             }).addTo(map);
-
-            // Re-append our absolute overlays back into the map container
-            let pOverlay = document.getElementById('plane-overlay');
-            if (pOverlay) document.getElementById('map').appendChild(pOverlay);
-            
-            let mControls = document.getElementById('flight-map-controls');
-            if (mControls) document.getElementById('map').appendChild(mControls);
 
             // Add labels layer
             map.createPane('labels');
@@ -1337,12 +1335,21 @@
         }
 
         function startFlight() {
+            if (FlightContext.rafId) cancelAnimationFrame(FlightContext.rafId);
+            clearAllTimeouts();
+            clearAutoFollow();
             showView('view-hud');
             document.getElementById('flight-map-controls').classList.remove('hidden');
             autoFollow = true;
             isLabelsVisible = true;
             FlightContext.sessionEnded = false;
+            document.getElementById('btn-abort').disabled = false;
             FlightContext.atcTriggered = { takeoff: false, cruise: false, landing: false };
+            
+            document.getElementById('hud-progress').style.width = "0%";
+            document.getElementById('hud-time').innerText = "--:--";
+            document.getElementById('hud-alt').innerText = "0 ft";
+            document.getElementById('hud-speed').innerText = "0 kts";
             
             document.getElementById('hud-route').innerText = `${FlightContext.currentFlight.from} → ${FlightContext.currentFlight.to}`;
             document.getElementById('hud-flight').innerText = FlightContext.currentFlight.num;
@@ -1356,6 +1363,7 @@
             
             FlightContext.planeOverlayX = null;
             FlightContext.planeOverlayY = null;
+            
             FlightContext.planeOverlayBearing = 0;
             FlightContext.currentFlight.targetLat = p1.lat;
             FlightContext.currentFlight.targetLon = p1.lon;
@@ -1371,8 +1379,10 @@
 
             map.setView([p1.lat, p1.lon], selectedZoom, {animate: false});
             
+            FlightContext.sessionStartTime = Date.now();
+            
             setStoppableTimeout(() => {
-                FlightContext.sessionStartTime = Date.now();
+                FlightContext.sessionStartTime = Date.now(); // Keep it accurate when actually starting
                 FlightContext.totalPausedMs = 0;
                 FlightContext.pauseStartTime = 0;
                 FlightContext.isManuallyPaused = false;
@@ -1397,7 +1407,7 @@
                 playATC(`Flight ${FlightContext.currentFlight.num}, cleared for takeoff.`);
                 
                 scheduleFlightDing(FlightContext.currentFlight.totalMs);
-                scheduleFlightCompletion(FlightContext.currentFlight.totalMs);
+                startBackgroundLoop();
                 startAutoFollow();
                 FlightContext.rafId = requestAnimationFrame(updateHUD);
             }, 100);
@@ -1421,6 +1431,7 @@
                 document.getElementById('hud-time').innerText = "00:00";
                 document.getElementById('hud-alt').innerText = "0 ft";
                 document.getElementById('hud-speed').innerText = "0 kts";
+                document.getElementById('btn-abort').disabled = true;
                 FlightContext.sessionEnded = true;
                 setStoppableTimeout(handleLanding, 1000);
                 return; // Stop loop
@@ -1485,17 +1496,23 @@
             FlightContext.currentFlight.targetLat = lat;
             FlightContext.currentFlight.targetLon = lon;
 
-            // CSS Overlay positioning
+            if (autoFollow) {
+                map.setView([lat, lon], map.getZoom(), {animate: false});
+            }
+
             let point = map.latLngToContainerPoint([lat, lon]);
-            let targetX = point.x;
-            let targetY = point.y;
             
-            if (FlightContext.planeOverlayX === null || isNaN(FlightContext.planeOverlayX)) {
-                FlightContext.planeOverlayX = targetX;
-                FlightContext.planeOverlayY = targetY;
+            if (autoFollow) {
+                FlightContext.planeOverlayX = point.x - 24;
+                FlightContext.planeOverlayY = point.y - 24;
             } else {
-                FlightContext.planeOverlayX += (targetX - FlightContext.planeOverlayX) * 0.15;
-                FlightContext.planeOverlayY += (targetY - FlightContext.planeOverlayY) * 0.15;
+                if (FlightContext.planeOverlayX === null || isNaN(FlightContext.planeOverlayX)) {
+                    FlightContext.planeOverlayX = point.x - 24;
+                    FlightContext.planeOverlayY = point.y - 24;
+                } else {
+                    FlightContext.planeOverlayX += ((point.x - 24) - FlightContext.planeOverlayX) * 0.15;
+                    FlightContext.planeOverlayY += ((point.y - 24) - FlightContext.planeOverlayY) * 0.15;
+                }
             }
 
             let poverlay = document.getElementById('plane-overlay');
@@ -1518,20 +1535,11 @@
                 
                 poverlay.style.transform = `translate(${FlightContext.planeOverlayX}px, ${FlightContext.planeOverlayY}px) rotate(${FlightContext.planeOverlayBearing}deg)`;
                 
-                // Add bounding box checks for map overflow clipping if any
                 if (p > 0.1 && p < 0.9) {
                     pinner.classList.add('plane-cruise');
                 } else {
                     pinner.classList.remove('plane-cruise');
                 }
-            }
-
-            if (autoFollow && FlightContext.currentFlight && typeof FlightContext.currentFlight.targetLat !== 'undefined') {
-                const currentCenter = map.getCenter();
-                const targetCenter = [FlightContext.currentFlight.targetLat, FlightContext.currentFlight.targetLon];
-                const newLat = currentCenter.lat + (targetCenter[0] - currentCenter.lat) * 0.03;
-                const newLng = currentCenter.lng + (targetCenter[1] - currentCenter.lng) * 0.03;
-                map.setView([newLat, newLng], map.getZoom(), {animate: false});
             }
 
             updateAmbientSound(p);
@@ -1957,15 +1965,42 @@
             }, totalMs * 0.1);
         }
 
-        function scheduleFlightCompletion(totalMs) {
-            setStoppableTimeout(() => {
-                if (document.hidden && "Notification" in window && Notification.permission === "granted") {
-                    new Notification("Flight Arrived", {
-                        body: `Flight ${FlightContext.currentFlight.num} has arrived at ${FlightContext.currentFlight.to}.`,
-                        icon: "✈️"
-                    });
+        function startBackgroundLoop() {
+            if (backgroundLoopInterval) clearInterval(backgroundLoopInterval);
+            FlightContext.notifiedAboutLanding = false;
+            FlightContext.notifiedLanded = false;
+            backgroundLoopInterval = setInterval(() => {
+                if (FlightContext.sessionEnded || !FlightContext.currentFlight || FlightContext.isManuallyPaused) return;
+
+                let elapsed = Date.now() - FlightContext.sessionStartTime - FlightContext.totalPausedMs;
+                const totalMs = FlightContext.currentFlight.min * 60 * 1000;
+                const remainingMs = totalMs - elapsed;
+
+                // Notify about landing (around 60 seconds before)
+                if (remainingMs <= 60000 && remainingMs > 0 && !FlightContext.notifiedAboutLanding) {
+                    FlightContext.notifiedAboutLanding = true;
+                    if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+                        new Notification("Prepare for Landing", {
+                            body: `Flight ${FlightContext.currentFlight.num} is approaching ${FlightContext.currentFlight.to}.`,
+                            icon: "✈️"
+                        });
+                    }
                 }
-            }, totalMs);
+
+                // Notify upon landing 
+                if (remainingMs <= 0 && !FlightContext.notifiedLanded) {
+                    FlightContext.notifiedLanded = true;
+                    if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+                        new Notification("Flight Arrived", {
+                            body: `Flight ${FlightContext.currentFlight.num} has arrived at ${FlightContext.currentFlight.to}.`,
+                            icon: "✈️"
+                        });
+                    }
+                    if (document.hidden) {
+                        handleLanding();
+                    }
+                }
+            }, 5000);
         }
 
         function playRadioStatic(duration) {
