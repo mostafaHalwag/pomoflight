@@ -264,7 +264,7 @@
         </div>
 
         <div style="text-align: center; margin-bottom: 10px;">
-            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.1.1</span></h1>
+            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.1.3</span></h1>
         </div>
 
         <!-- Views -->
@@ -281,6 +281,7 @@
                     <div style="margin-top: 5px;">
                         <input type="text" id="search-dept" placeholder="Ex: JFK, London" autocomplete="off" style="width:100%; padding: 12px; background: var(--card-bg); border: 1px solid var(--border); color: var(--text-main); font-family: inherit; font-size: 0.9em; border-radius: 0;">
                         <div id="search-results-dept" class="search-dropdown hidden" style="position:absolute; width:100%; background:var(--panel-bg); border:1px solid var(--border); z-index:100; max-height:200px; overflow-y:auto; border-top:none; box-shadow: var(--glow);"></div>
+                        <button onclick="showAllAirportsModal('from')" style="width:100%; background:var(--card-bg); border:1px solid var(--border); border-top:none; padding:8px; color:var(--text-main); opacity: 0.7; cursor:pointer; font-size:0.8em; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">+ Show all airports</button>
                     </div>
                     <div id="connected-flight-label" class="hidden" style="font-size: 0.65em; color: var(--accent); margin-top: 8px;">
                         Continuing from <span id="connected-airport-code" style="font-weight:bold;"></span> 
@@ -292,6 +293,7 @@
                     <div style="margin-top: 5px;">
                         <input type="text" id="search-arr" placeholder="Ex: LAX, Tokyo" autocomplete="off" style="width:100%; padding: 12px; background: var(--card-bg); border: 1px solid var(--border); color: var(--text-main); font-family: inherit; font-size: 0.9em; border-radius: 0;">
                         <div id="search-results-arr" class="search-dropdown hidden" style="position:absolute; width:100%; background:var(--panel-bg); border:1px solid var(--border); z-index:100; max-height:200px; overflow-y:auto; border-top:none; box-shadow: var(--glow);"></div>
+                        <button onclick="showAllAirportsModal('to')" style="width:100%; background:var(--card-bg); border:1px solid var(--border); border-top:none; padding:8px; color:var(--text-main); opacity: 0.7; cursor:pointer; font-size:0.8em; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">+ Show all airports</button>
                     </div>
                 </div>
             </div>
@@ -406,9 +408,21 @@
         </div>
 
         <div id="view-break" class="hidden card view-panel" style="text-align: center;">
-            <h2>Layover</h2>
+            <h2 id="break-title">Layover</h2>
+            <div id="break-subtitle" style="color: var(--text-dim); margin-bottom: 20px;"></div>
+            
+            <div id="fuel-gauge" class="hidden" style="margin: 0 auto 10px auto; width: 60px; height: 60px; position: relative;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%; height:100%; color: var(--accent);">
+                    <rect x="4" y="6" width="16" height="15" rx="2" ry="2"></rect>
+                    <line x1="4" y1="10" x2="20" y2="10"></line>
+                    <path d="M7 6V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v2"></path>
+                </svg>
+                <div id="fuel-level" style="position: absolute; bottom: 3px; left: 4px; right: 4px; height: 0%; background: rgba(59,130,246,0.3); transition: height 1s linear;"></div>
+            </div>
+
             <div class="hud-value" id="break-time" style="font-size: 3em; margin: 20px 0;">05:00</div>
-            <button class="btn" id="btn-end-break">End Break</button>
+            <button class="btn" id="btn-end-break" style="transition: opacity 0.3s; opacity: 1;">End Break</button>
+            <div id="break-mandatory-text" class="hidden" style="font-size: 0.8em; color: var(--text-dim); margin-top: 10px;">Mandatory break. You can skip in <span id="break-skip-time">2:00</span></div>
         </div>
 
         <div class="card">
@@ -439,155 +453,174 @@
         </div>
     </div>
 
+    <div id="all-airports-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.8); z-index:2000; justify-content:center; align-items:center;" onclick="if(event.target === this) closeAllAirportsModal()">
+        <div class="card" style="width: 90%; max-width: 600px; max-height: 80vh; display:flex; flex-direction:column;">
+            <div class="flex-between" style="border-bottom: 1px solid var(--border-light); padding-bottom: 15px; margin-bottom: 15px;">
+                <h2 style="margin:0;">All Airports</h2>
+                <button onclick="closeAllAirportsModal()" style="background:none; border:none; color:var(--text-main); font-size:1.5em; cursor:pointer;">&times;</button>
+            </div>
+            <div id="all-airports-list" style="overflow-y: auto; flex-grow: 1;"></div>
+        </div>
+    </div>
+
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script>
         // DATA
         const AIRPORTS = [
-            { code: "HBE", name: "Borg El Arab", lat: 31.0, lon: 29.6 },
-            { code: "CAI", name: "Cairo", lat: 30.1219, lon: 31.4056 },
-            { code: "LXR", name: "Luxor", lat: 25.6706, lon: 32.7064 },
-            { code: "HRG", name: "Hurghada", lat: 27.1783, lon: 33.7994 },
-            { code: "SSH", name: "Sharm El-Sheikh", lat: 27.9772, lon: 34.3948 },
-            { code: "AMM", name: "Amman", lat: 31.7225, lon: 35.9932 },
-            { code: "BEY", name: "Beirut", lat: 33.8214, lon: 35.4883 },
-            { code: "KWI", name: "Kuwait", lat: 29.2266, lon: 47.9689 },
-            { code: "BAH", name: "Bahrain", lat: 26.2708, lon: 50.6336 },
-            { code: "DOH", name: "Doha", lat: 25.2611, lon: 51.6080 },
-            { code: "AUH", name: "Abu Dhabi", lat: 24.4330, lon: 54.6511 },
-            { code: "DXB", name: "Dubai", lat: 25.2532, lon: 55.3657 },
-            { code: "MCT", name: "Muscat", lat: 23.5933, lon: 58.2844 },
-            { code: "RUH", name: "Riyadh", lat: 24.9576, lon: 46.6988 },
-            { code: "JED", name: "Jeddah", lat: 21.6703, lon: 39.1565 },
-            { code: "LHR", name: "London", lat: 51.4700, lon: -0.4543 },
-            { code: "CDG", name: "Paris", lat: 49.0097, lon: 2.5479 },
-            { code: "AMS", name: "Amsterdam", lat: 52.3105, lon: 4.7683 },
-            { code: "FRA", name: "Frankfurt", lat: 50.0333, lon: 8.5705 },
-            { code: "MAD", name: "Madrid", lat: 40.4983, lon: -3.5676 },
-            { code: "FCO", name: "Rome", lat: 41.8003, lon: 12.2388 },
-            { code: "BCN", name: "Barcelona", lat: 41.2974, lon: 2.0833 },
-            { code: "MUC", name: "Munich", lat: 48.3537, lon: 11.7861 },
-            { code: "ZRH", name: "Zurich", lat: 47.4502, lon: 8.5618 },
-            { code: "VIE", name: "Vienna", lat: 48.1103, lon: 16.5697 },
-            { code: "IST", name: "Istanbul", lat: 41.2753, lon: 28.7520 },
-            { code: "ATH", name: "Athens", lat: 37.9364, lon: 23.9445 },
-            { code: "LIS", name: "Lisbon", lat: 38.7742, lon: -9.1342 },
-            { code: "BRU", name: "Brussels", lat: 50.9014, lon: 4.4844 },
-            { code: "CPH", name: "Copenhagen", lat: 55.6180, lon: 12.6560 },
-            { code: "ARN", name: "Stockholm", lat: 59.6519, lon: 17.9186 },
-            { code: "HEL", name: "Helsinki", lat: 60.3172, lon: 24.9633 },
-            { code: "WAW", name: "Warsaw", lat: 52.1657, lon: 20.9671 },
-            { code: "PRG", name: "Prague", lat: 50.1008, lon: 14.2600 },
-            { code: "BUD", name: "Budapest", lat: 47.4369, lon: 19.2375 },
-            { code: "DUB", name: "Dublin", lat: 53.4264, lon: -6.2499 },
-            { code: "JNB", name: "Johannesburg", lat: -26.1392, lon: 28.2460 },
-            { code: "CPT", name: "Cape Town", lat: -33.9715, lon: 18.6021 },
-            { code: "NBO", name: "Nairobi", lat: -1.3192, lon: 36.9278 },
-            { code: "ADD", name: "Addis Ababa", lat: 8.9779, lon: 38.7993 },
-            { code: "LOS", name: "Lagos", lat: 6.5774, lon: 3.3220 },
-            { code: "ACC", name: "Accra", lat: 5.6052, lon: -0.1668 },
-            { code: "CMN", name: "Casablanca", lat: 33.3675, lon: -7.5898 },
-            { code: "TUN", name: "Tunis", lat: 36.8510, lon: 10.2272 },
-            { code: "ALG", name: "Algiers", lat: 36.6910, lon: 3.2154 },
-            { code: "DAR", name: "Dar es Salaam", lat: -6.8781, lon: 39.2026 },
-            { code: "SIN", name: "Singapore", lat: 1.3644, lon: 103.9915 },
-            { code: "BKK", name: "Bangkok", lat: 13.6900, lon: 100.7501 },
-            { code: "KUL", name: "Kuala Lumpur", lat: 2.7456, lon: 101.7099 },
-            { code: "CGK", name: "Jakarta", lat: -6.1256, lon: 106.6558 },
-            { code: "MNL", name: "Manila", lat: 14.5086, lon: 121.0194 },
-            { code: "HKG", name: "Hong Kong", lat: 22.3080, lon: 113.9185 },
-            { code: "PEK", name: "Beijing", lat: 40.0799, lon: 116.6031 },
-            { code: "PVG", name: "Shanghai", lat: 31.1443, lon: 121.8083 },
-            { code: "ICN", name: "Seoul", lat: 37.4602, lon: 126.4407 },
-            { code: "NRT", name: "Tokyo Narita", lat: 35.7647, lon: 140.3863 },
-            { code: "HND", name: "Tokyo Haneda", lat: 35.5494, lon: 139.7798 },
-            { code: "DEL", name: "New Delhi", lat: 28.5562, lon: 77.1000 },
-            { code: "BOM", name: "Mumbai", lat: 19.0896, lon: 72.8656 },
-            { code: "LKO", name: "Lucknow", lat: 26.7606, lon: 80.8893 },
-            { code: "KHI", name: "Karachi", lat: 24.9065, lon: 67.1608 },
-            { code: "JFK", name: "New York", lat: 40.6413, lon: -73.7781 },
-            { code: "LAX", name: "Los Angeles", lat: 33.9416, lon: -118.4085 },
-            { code: "ORD", name: "Chicago", lat: 41.9742, lon: -87.9073 },
-            { code: "MIA", name: "Miami", lat: 25.7959, lon: -80.2870 },
-            { code: "YYZ", name: "Toronto", lat: 43.6777, lon: -79.6248 },
-            { code: "YVR", name: "Vancouver", lat: 49.1967, lon: -123.1815 },
-            { code: "GRU", name: "Sao Paulo", lat: -23.4356, lon: -46.4731 },
-            { code: "EZE", name: "Buenos Aires", lat: -34.8222, lon: -58.5358 },
-            { code: "BOG", name: "Bogota", lat: 4.7016, lon: -74.1469 },
-            { code: "LIM", name: "Lima", lat: -12.0219, lon: -77.1143 },
-            { code: "MEX", name: "Mexico City", lat: 19.4361, lon: -99.0719 },
-            { code: "SCL", name: "Santiago", lat: -33.3930, lon: -70.7858 },
-            { code: "SYD", name: "Sydney", lat: -33.9461, lon: 151.1772 },
-            { code: "MEL", name: "Melbourne", lat: -37.6690, lon: 144.8410 },
-            { code: "AKL", name: "Auckland", lat: -37.0082, lon: 174.7915 },
-            { code: "BNE", name: "Brisbane", lat: -27.3842, lon: 153.1175 },
-            { code: "PHL", name: "Philadelphia", lat: 39.8719, lon: -75.2411 },
-            { code: "CLT", name: "Charlotte", lat: 35.2140, lon: -80.9431 },
-            { code: "DTW", name: "Detroit", lat: 42.2124, lon: -83.3533 },
-            { code: "MSP", name: "Minneapolis", lat: 44.8809, lon: -93.2217 },
-            { code: "BWI", name: "Baltimore", lat: 39.1753, lon: -76.6683 },
-            { code: "SLC", name: "Salt Lake City", lat: 40.7883, lon: -111.9777 },
-            { code: "SAN", name: "San Diego", lat: 32.7335, lon: -117.1896 },
-            { code: "TPA", name: "Tampa", lat: 27.9754, lon: -82.5332 },
-            { code: "PDX", name: "Portland", lat: 45.5887, lon: -122.5975 },
-            { code: "HOU", name: "Houston Hobby", lat: 29.6454, lon: -95.2788 },
-            { code: "DAL", name: "Dallas Love", lat: 32.8471, lon: -96.8517 },
-            { code: "SJC", name: "San Jose", lat: 37.3615, lon: -121.9289 },
-            { code: "AUS", name: "Austin", lat: 30.1945, lon: -97.6698 },
-            { code: "BNA", name: "Nashville", lat: 36.1244, lon: -86.6781 },
-            { code: "RDU", name: "Raleigh", lat: 35.8776, lon: -78.7874 },
-            { code: "SMF", name: "Sacramento", lat: 38.6954, lon: -121.5907 },
-            { code: "MSY", name: "New Orleans", lat: 29.9933, lon: -90.2580 },
-            { code: "IND", name: "Indianapolis", lat: 39.7173, lon: -86.2946 },
-            { code: "PIT", name: "Pittsburgh", lat: 40.4914, lon: -80.2328 },
-            { code: "CVG", name: "Cincinnati", lat: 39.0461, lon: -84.6621 },
-            { code: "CMH", name: "Columbus", lat: 39.9979, lon: -82.8918 },
-            { code: "MKE", name: "Milwaukee", lat: 42.9472, lon: -87.8965 },
-            { code: "JAX", name: "Jacksonville", lat: 30.4940, lon: -81.6878 },
-            { code: "BDL", name: "Hartford", lat: 41.9388, lon: -72.6832 },
-            { code: "RSW", name: "Fort Myers", lat: 26.5361, lon: -81.7551 },
-            { code: "PBI", name: "West Palm Beach", lat: 26.6831, lon: -80.0955 },
-            { code: "RIC", name: "Richmond", lat: 37.5051, lon: -77.3196 },
-            { code: "ORF", name: "Norfolk", lat: 36.8946, lon: -76.2012 },
-            { code: "CHS", name: "Charleston", lat: 32.8986, lon: -80.0405 },
-            { code: "SYR", name: "Syracuse", lat: 43.1111, lon: -76.1063 },
-            { code: "TUS", name: "Tucson", lat: 32.1160, lon: -110.9410 },
-            { code: "YEG", name: "Edmonton", lat: 53.3097, lon: -113.5797 },
-            { code: "YYC", name: "Calgary", lat: 51.1138, lon: -114.0202 },
-            { code: "YOW", name: "Ottawa", lat: 45.3225, lon: -75.6691 },
-            { code: "YHZ", name: "Halifax", lat: 44.8808, lon: -63.5086 },
-            { code: "YWG", name: "Winnipeg", lat: 49.9094, lon: -97.2399 },
-            { code: "YQB", name: "Quebec City", lat: 46.7911, lon: -71.3933 },
-            { code: "GVA", name: "Geneva", lat: 46.2380, lon: 6.1089 },
-            { code: "BSL", name: "Basel", lat: 47.5900, lon: 7.5292 },
-            { code: "LYS", name: "Lyon", lat: 45.7255, lon: 5.0811 },
-            { code: "MRS", name: "Marseille", lat: 43.4361, lon: 5.2150 },
-            { code: "NCE", name: "Nice", lat: 43.6584, lon: 7.2158 },
-            { code: "FRA", name: "Frankfurt", lat: 50.0333, lon: 8.5705 },
-            { code: "HAM", name: "Hamburg", lat: 53.6304, lon: 9.9882 },
-            { code: "STR", name: "Stuttgart", lat: 48.6898, lon: 9.2219 },
-            { code: "CGN", name: "Cologne", lat: 50.8659, lon: 7.1427 },
-            { code: "HAJ", name: "Hanover", lat: 52.4610, lon: 9.6850 },
-            { code: "NUE", name: "Nuremberg", lat: 49.4987, lon: 11.0780 },
-            { code: "LEJ", name: "Leipzig", lat: 51.4239, lon: 12.2363 },
-            { code: "BRE", name: "Bremen", lat: 53.0475, lon: 8.7866 },
-            { code: "MAN", name: "Manchester", lat: 53.3537, lon: -2.2749 },
-            { code: "EDI", name: "Edinburgh", lat: 55.9500, lon: -3.3725 },
-            { code: "BHX", name: "Birmingham", lat: 52.4538, lon: -1.7480 },
-            { code: "GLA", name: "Glasgow", lat: 55.8719, lon: -4.4330 },
-            { code: "BRS", name: "Bristol", lat: 51.3826, lon: -2.7190 },
-            { code: "NCL", name: "Newcastle", lat: 55.0375, lon: -1.6916 },
-            { code: "LPL", name: "Liverpool", lat: 53.3336, lon: -2.8497 },
-            { code: "LGW", name: "London Gatwick", lat: 51.1536, lon: -0.1820 },
-            { code: "STN", name: "London Stansted", lat: 51.8850, lon: 0.2350 },
-            { code: "LTN", name: "London Luton", lat: 51.8747, lon: -0.3683 },
-            { code: "BLQ", name: "Bologna", lat: 44.5354, lon: 11.2886 },
-            { code: "VCE", name: "Venice", lat: 45.5052, lon: 12.3519 },
-            { code: "NAP", name: "Naples", lat: 40.8860, lon: 14.2907 },
-            { code: "CTA", name: "Catania", lat: 37.4667, lon: 15.0664 },
-            { code: "PMO", name: "Palermo", lat: 38.1759, lon: 13.0910 },
-            { code: "BGY", name: "Milan Bergamo", lat: 45.6738, lon: 9.7041 },
-            { code: "TRN", name: "Turin", lat: 45.2007, lon: 7.6496 }
+            { code: "HBE", name: "Borg El Arab", lat: 31.0, lon: 29.6, city: "Alexandria", country: "Egypt", region: "Africa" },
+            { code: "CAI", name: "Cairo Intl", lat: 30.1219, lon: 31.4056, city: "Cairo", country: "Egypt", region: "Africa" },
+            { code: "LXR", name: "Luxor Intl", lat: 25.6706, lon: 32.7064, city: "Luxor", country: "Egypt", region: "Africa" },
+            { code: "HRG", name: "Hurghada Intl", lat: 27.1783, lon: 33.7994, city: "Hurghada", country: "Egypt", region: "Africa" },
+            { code: "SSH", name: "Sharm El-Sheikh Intl", lat: 27.9772, lon: 34.3948, city: "Sharm El-Sheikh", country: "Egypt", region: "Africa" },
+            { code: "AMM", name: "Queen Alia Intl", lat: 31.7225, lon: 35.9932, city: "Amman", country: "Jordan", region: "Asia" },
+            { code: "BEY", name: "Beirut Rafic Hariri Intl", lat: 33.8214, lon: 35.4883, city: "Beirut", country: "Lebanon", region: "Asia" },
+            { code: "KWI", name: "Kuwait Intl", lat: 29.2266, lon: 47.9689, city: "Kuwait City", country: "Kuwait", region: "Asia" },
+            { code: "BAH", name: "Bahrain Intl", lat: 26.2708, lon: 50.6336, city: "Manama", country: "Bahrain", region: "Asia" },
+            { code: "DOH", name: "Hamad Intl", lat: 25.2611, lon: 51.6080, city: "Doha", country: "Qatar", region: "Asia" },
+            { code: "AUH", name: "Zayed Intl", lat: 24.4330, lon: 54.6511, city: "Abu Dhabi", country: "UAE", region: "Asia" },
+            { code: "DXB", name: "Dubai Intl", lat: 25.2532, lon: 55.3657, city: "Dubai", country: "UAE", region: "Asia" },
+            { code: "MCT", name: "Muscat Intl", lat: 23.5933, lon: 58.2844, city: "Muscat", country: "Oman", region: "Asia" },
+            { code: "RUH", name: "King Khalid Intl", lat: 24.9576, lon: 46.6988, city: "Riyadh", country: "Saudi Arabia", region: "Asia" },
+            { code: "JED", name: "King Abdulaziz Intl", lat: 21.6703, lon: 39.1565, city: "Jeddah", country: "Saudi Arabia", region: "Asia" },
+            { code: "LHR", name: "Heathrow", lat: 51.4700, lon: -0.4543, city: "London", country: "UK", region: "Europe" },
+            { code: "CDG", name: "Charles de Gaulle", lat: 49.0097, lon: 2.5479, city: "Paris", country: "France", region: "Europe" },
+            { code: "AMS", name: "Schiphol", lat: 52.3105, lon: 4.7683, city: "Amsterdam", country: "Netherlands", region: "Europe" },
+            { code: "FRA", name: "Frankfurt am Main", lat: 50.0333, lon: 8.5705, city: "Frankfurt", country: "Germany", region: "Europe" },
+            { code: "MAD", name: "Adolfo Suárez Madrid–Barajas", lat: 40.4983, lon: -3.5676, city: "Madrid", country: "Spain", region: "Europe" },
+            { code: "BCN", name: "Josep Tarradellas Barcelona-El Prat", lat: 41.2974, lon: 2.0833, city: "Barcelona", country: "Spain", region: "Europe" },
+            { code: "FCO", name: "Leonardo da Vinci–Fiumicino", lat: 41.7999, lon: 12.2462, city: "Rome", country: "Italy", region: "Europe" },
+            { code: "MUC", name: "Munich Intl", lat: 48.3537, lon: 11.7861, city: "Munich", country: "Germany", region: "Europe" },
+            { code: "IST", name: "Istanbul Intl", lat: 41.2590, lon: 28.7424, city: "Istanbul", country: "Turkey", region: "Europe" },
+            { code: "SVO", name: "Sheremetyevo Intl", lat: 55.9726, lon: 37.4146, city: "Moscow", country: "Russia", region: "Europe" },
+            { code: "ZRH", name: "Zurich", lat: 47.4646, lon: 8.5492, city: "Zurich", country: "Switzerland", region: "Europe" },
+            { code: "CPH", name: "Copenhagen", lat: 55.6180, lon: 12.6560, city: "Copenhagen", country: "Denmark", region: "Europe" },
+            { code: "DEL", name: "Indira Gandhi Intl", lat: 28.5562, lon: 77.1000, city: "New Delhi", country: "India", region: "Asia" },
+            { code: "BOM", name: "Chhatrapati Shivaji Maharaj Intl", lat: 19.0896, lon: 72.8656, city: "Mumbai", country: "India", region: "Asia" },
+            { code: "NRT", name: "Narita Intl", lat: 35.7647, lon: 140.3863, city: "Tokyo", country: "Japan", region: "Asia" },
+            { code: "HND", name: "Haneda", lat: 35.5494, lon: 139.7798, city: "Tokyo", country: "Japan", region: "Asia" },
+            { code: "PEK", name: "Beijing Capital Intl", lat: 40.0725, lon: 116.5975, city: "Beijing", country: "China", region: "Asia" },
+            { code: "PVG", name: "Shanghai Pudong Intl", lat: 31.1443, lon: 121.8083, city: "Shanghai", country: "China", region: "Asia" },
+            { code: "HKG", name: "Hong Kong Intl", lat: 22.3080, lon: 113.9185, city: "Hong Kong", country: "Hong Kong", region: "Asia" },
+            { code: "SIN", name: "Changi", lat: 1.3644, lon: 103.9915, city: "Singapore", country: "Singapore", region: "Asia" },
+            { code: "BKK", name: "Suvarnabhumi", lat: 13.6900, lon: 100.7501, city: "Bangkok", country: "Thailand", region: "Asia" },
+            { code: "KUL", name: "Kuala Lumpur Intl", lat: 2.7456, lon: 101.7099, city: "Kuala Lumpur", country: "Malaysia", region: "Asia" },
+            { code: "ICN", name: "Incheon Intl", lat: 37.4692, lon: 126.4505, city: "Seoul", country: "South Korea", region: "Asia" },
+            { code: "SYD", name: "Sydney Kingsford Smith", lat: -33.9399, lon: 151.1753, city: "Sydney", country: "Australia", region: "Oceania" },
+            { code: "MEL", name: "Melbourne", lat: -37.6690, lon: 144.8410, city: "Melbourne", country: "Australia", region: "Oceania" },
+            { code: "AKL", name: "Auckland", lat: -37.0082, lon: 174.7917, city: "Auckland", country: "New Zealand", region: "Oceania" },
+            { code: "JFK", name: "John F. Kennedy Intl", lat: 40.6413, lon: -73.7781, city: "New York", country: "USA", region: "Americas" },
+            { code: "LAX", name: "Los Angeles Intl", lat: 33.9416, lon: -118.4085, city: "Los Angeles", country: "USA", region: "Americas" },
+            { code: "ORD", name: "OHare Intl", lat: 41.9742, lon: -87.9073, city: "Chicago", country: "USA", region: "Americas" },
+            { code: "DFW", name: "Dallas/Fort Worth Intl", lat: 32.8998, lon: -97.0403, city: "Dallas/Fort Worth", country: "USA", region: "Americas" },
+            { code: "MIA", name: "Miami Intl", lat: 25.7959, lon: -80.2870, city: "Miami", country: "USA", region: "Americas" },
+            { code: "SFO", name: "San Francisco Intl", lat: 37.6213, lon: -122.3790, city: "San Francisco", country: "USA", region: "Americas" },
+            { code: "YYZ", name: "Toronto Pearson", lat: 43.6777, lon: -79.6248, city: "Toronto", country: "Canada", region: "Americas" },
+            { code: "YVR", name: "Vancouver Intl", lat: 49.1967, lon: -123.1815, city: "Vancouver", country: "Canada", region: "Americas" },
+            { code: "MEX", name: "Benito Juárez Intl", lat: 19.4361, lon: -99.0719, city: "Mexico City", country: "Mexico", region: "Americas" },
+            { code: "GRU", name: "São Paulo/Guarulhos Intl", lat: -23.4306, lon: -46.4731, city: "São Paulo", country: "Brazil", region: "Americas" },
+            { code: "EZE", name: "Ministro Pistarini Intl", lat: -34.8222, lon: -58.5358, city: "Buenos Aires", country: "Argentina", region: "Americas" },
+            { code: "SCL", name: "Arturo Merino Benítez Intl", lat: -33.3930, lon: -70.7858, city: "Santiago", country: "Chile", region: "Americas" },
+            { code: "BOG", name: "El Dorado Intl", lat: 4.7016, lon: -74.1469, city: "Bogota", country: "Colombia", region: "Americas" },
+            { code: "LIM", name: "Jorge Chávez Intl", lat: -12.0219, lon: -77.1143, city: "Lima", country: "Peru", region: "Americas" },
+            { code: "JNB", name: "O. R. Tambo Intl", lat: -26.1367, lon: 28.2411, city: "Johannesburg", country: "South Africa", region: "Africa" },
+            { code: "CPT", name: "Cape Town Intl", lat: -33.9715, lon: 18.6021, city: "Cape Town", country: "South Africa", region: "Africa" },
+            { code: "NBO", name: "Jomo Kenyatta Intl", lat: -1.3192, lon: 36.9278, city: "Nairobi", country: "Kenya", region: "Africa" },
+            { code: "ADD", name: "Addis Ababa Bole", lat: 8.9778, lon: 38.7993, city: "Addis Ababa", country: "Ethiopia", region: "Africa" },
+            { code: "LOS", name: "Murtala Muhammed Intl", lat: 6.5774, lon: 3.3215, city: "Lagos", country: "Nigeria", region: "Africa" },
+            { code: "CMN", name: "Mohammed V Intl", lat: 33.3675, lon: -7.5898, city: "Casablanca", country: "Morocco", region: "Africa" },
+            
+            // New African Airports
+            { code: "KGL", name: "Kigali Intl", lat: -1.9686, lon: 30.1394, city: "Kigali", country: "Rwanda", region: "Africa" },
+            { code: "DAR", name: "Julius Nyerere Intl", lat: -6.8781, lon: 39.2026, city: "Dar es Salaam", country: "Tanzania", region: "Africa" },
+            { code: "MPM", name: "Maputo Intl", lat: -25.9208, lon: 32.5726, city: "Maputo", country: "Mozambique", region: "Africa" },
+            { code: "WDH", name: "Hosea Kutako Intl", lat: -22.4799, lon: 17.4582, city: "Windhoek", country: "Namibia", region: "Africa" },
+            { code: "LLW", name: "Lilongwe Intl", lat: -13.7844, lon: 33.7744, city: "Lilongwe", country: "Malawi", region: "Africa" },
+            { code: "EBB", name: "Entebbe Intl", lat: 0.0424, lon: 32.4435, city: "Entebbe", country: "Uganda", region: "Africa" },
+            { code: "KRT", name: "Khartoum Intl", lat: 15.5895, lon: 32.5532, city: "Khartoum", country: "Sudan", region: "Africa" },
+            { code: "NDJ", name: "NDjamena Intl", lat: 12.1337, lon: 15.0298, city: "NDjamena", country: "Chad", region: "Africa" },
+            { code: "ABJ", name: "Félix-Houphouët-Boigny Intl", lat: 5.2614, lon: -3.9263, city: "Abidjan", country: "Ivory Coast", region: "Africa" },
+            { code: "DSS", name: "Blaise Diagne Intl", lat: 14.6711, lon: -17.0733, city: "Dakar", country: "Senegal", region: "Africa" },
+            { code: "CKY", name: "Conakry Intl", lat: 9.5769, lon: -13.6119, city: "Conakry", country: "Guinea", region: "Africa" },
+
+            // New Asian Airports
+            { code: "BLR", name: "Kempegowda Intl", lat: 13.1986, lon: 77.7066, city: "Bangalore", country: "India", region: "Asia" },
+            { code: "HYD", name: "Rajiv Gandhi Intl", lat: 17.2403, lon: 78.4294, city: "Hyderabad", country: "India", region: "Asia" },
+            { code: "CCU", name: "Netaji Subhas Chandra Bose Intl", lat: 22.6547, lon: 88.4467, city: "Kolkata", country: "India", region: "Asia" },
+            { code: "MAA", name: "Chennai Intl", lat: 12.9941, lon: 80.1709, city: "Chennai", country: "India", region: "Asia" },
+            { code: "HAN", name: "Noi Bai Intl", lat: 21.2212, lon: 105.8072, city: "Hanoi", country: "Vietnam", region: "Asia" },
+            { code: "SGN", name: "Tan Son Nhat Intl", lat: 10.8188, lon: 106.6520, city: "Ho Chi Minh City", country: "Vietnam", region: "Asia" },
+            { code: "PNH", name: "Phnom Penh Intl", lat: 11.5466, lon: 104.8440, city: "Phnom Penh", country: "Cambodia", region: "Asia" },
+            { code: "RGN", name: "Yangon Intl", lat: 16.9043, lon: 96.1332, city: "Yangon", country: "Myanmar", region: "Asia" },
+            { code: "DAC", name: "Hazrat Shahjalal Intl", lat: 23.8433, lon: 90.4000, city: "Dhaka", country: "Bangladesh", region: "Asia" },
+            { code: "KTM", name: "Tribhuvan Intl", lat: 27.6966, lon: 85.3592, city: "Kathmandu", country: "Nepal", region: "Asia" },
+            { code: "CMB", name: "Bandaranaike Intl", lat: 7.1803, lon: 79.8833, city: "Colombo", country: "Sri Lanka", region: "Asia" },
+            { code: "MLE", name: "Velana Intl", lat: 4.1918, lon: 73.5291, city: "Male", country: "Maldives", region: "Asia" },
+            { code: "TAS", name: "Islam Karimov Tashkent Intl", lat: 41.2579, lon: 69.2812, city: "Tashkent", country: "Uzbekistan", region: "Asia" },
+            { code: "ALA", name: "Almaty Intl", lat: 43.3521, lon: 77.0405, city: "Almaty", country: "Kazakhstan", region: "Asia" },
+            { code: "FRU", name: "Manas Intl", lat: 43.0613, lon: 74.4776, city: "Bishkek", country: "Kyrgyzstan", region: "Asia" },
+            { code: "TBS", name: "Shota Rustaveli Tbilisi Intl", lat: 41.6692, lon: 44.9547, city: "Tbilisi", country: "Georgia", region: "Asia" },
+            { code: "EVN", name: "Zvartnots Intl", lat: 40.1473, lon: 44.3959, city: "Yerevan", country: "Armenia", region: "Asia" },
+            { code: "GYD", name: "Heydar Aliyev Intl", lat: 40.4675, lon: 50.0467, city: "Baku", country: "Azerbaijan", region: "Asia" },
+
+            // New Latin American Airports
+            { code: "PTY", name: "Tocumen Intl", lat: 9.0714, lon: -79.3835, city: "Panama City", country: "Panama", region: "Americas" },
+            { code: "SJO", name: "Juan Santamaría Intl", lat: 10.0022, lon: -84.2088, city: "San Jose", country: "Costa Rica", region: "Americas" },
+            { code: "UIO", name: "Mariscal Sucre Intl", lat: -0.1292, lon: -78.3575, city: "Quito", country: "Ecuador", region: "Americas" },
+            { code: "MDE", name: "José María Córdova Intl", lat: 6.1645, lon: -75.4231, city: "Medellin", country: "Colombia", region: "Americas" },
+            { code: "CTG", name: "Rafael Núñez Intl", lat: 10.4424, lon: -75.5130, city: "Cartagena", country: "Colombia", region: "Americas" },
+            { code: "MVD", name: "Carrasco Intl", lat: -34.8384, lon: -56.0308, city: "Montevideo", country: "Uruguay", region: "Americas" },
+            { code: "ASU", name: "Silvio Pettirossi Intl", lat: -25.2401, lon: -57.5188, city: "Asuncion", country: "Paraguay", region: "Americas" },
+            { code: "LPB", name: "El Alto Intl", lat: -16.5133, lon: -68.1923, city: "La Paz", country: "Bolivia", region: "Americas" },
+            { code: "CUN", name: "Cancún Intl", lat: 21.0365, lon: -86.8771, city: "Cancun", country: "Mexico", region: "Americas" },
+            { code: "GDL", name: "Guadalajara Intl", lat: 20.5218, lon: -103.3112, city: "Guadalajara", country: "Mexico", region: "Americas" },
+            { code: "HAV", name: "José Martí Intl", lat: 22.9892, lon: -82.4091, city: "Havana", country: "Cuba", region: "Americas" },
+            { code: "SJU", name: "Luis Muñoz Marín Intl", lat: 18.4394, lon: -66.0018, city: "San Juan", country: "Puerto Rico", region: "Americas" },
+            { code: "SDQ", name: "Las Américas Intl", lat: 18.4297, lon: -69.6689, city: "Santo Domingo", country: "Dominican Republic", region: "Americas" },
+
+            // New European Airports
+            { code: "OPO", name: "Francisco Sá Carneiro", lat: 41.2481, lon: -8.6814, city: "Porto", country: "Portugal", region: "Europe" },
+            { code: "SVQ", name: "Seville", lat: 37.4180, lon: -5.8931, city: "Seville", country: "Spain", region: "Europe" },
+            { code: "VLC", name: "Valencia", lat: 39.4893, lon: -0.4816, city: "Valencia", country: "Spain", region: "Europe" },
+            { code: "PMI", name: "Palma de Mallorca", lat: 39.5517, lon: 2.7388, city: "Palma", country: "Spain", region: "Europe" },
+            { code: "TLS", name: "Toulouse-Blagnac", lat: 43.6291, lon: 1.3638, city: "Toulouse", country: "France", region: "Europe" },
+            { code: "BOD", name: "Bordeaux-Mérignac", lat: 44.8283, lon: -0.7156, city: "Bordeaux", country: "France", region: "Europe" },
+            { code: "NTE", name: "Nantes Atlantique", lat: 47.1532, lon: -1.6107, city: "Nantes", country: "France", region: "Europe" },
+            { code: "BIO", name: "Bilbao", lat: 43.3011, lon: -2.9106, city: "Bilbao", country: "Spain", region: "Europe" },
+            { code: "OSL", name: "Oslo Gardermoen", lat: 60.1975, lon: 11.1004, city: "Oslo", country: "Norway", region: "Europe" },
+            { code: "BGO", name: "Bergen Flesland", lat: 60.2933, lon: 5.2181, city: "Bergen", country: "Norway", region: "Europe" },
+            { code: "GOT", name: "Göteborg Landvetter", lat: 57.6628, lon: 12.2798, city: "Gothenburg", country: "Sweden", region: "Europe" },
+            { code: "KRK", name: "Kraków John Paul II Intl", lat: 50.0777, lon: 19.7848, city: "Krakow", country: "Poland", region: "Europe" },
+            { code: "OTP", name: "Henri Coandă Intl", lat: 44.5711, lon: 26.1858, city: "Bucharest", country: "Romania", region: "Europe" },
+            { code: "SOF", name: "Sofia", lat: 42.6952, lon: 23.4061, city: "Sofia", country: "Bulgaria", region: "Europe" },
+            { code: "BEG", name: "Belgrade Nikola Tesla", lat: 44.8184, lon: 20.3091, city: "Belgrade", country: "Serbia", region: "Europe" },
+            { code: "ZAG", name: "Zagreb Franjo Tuđman", lat: 45.7429, lon: 16.0688, city: "Zagreb", country: "Croatia", region: "Europe" },
+            { code: "RIX", name: "Riga Intl", lat: 56.9236, lon: 23.9711, city: "Riga", country: "Latvia", region: "Europe" },
+            { code: "TLL", name: "Lennart Meri Tallinn", lat: 59.4133, lon: 24.8328, city: "Tallinn", country: "Estonia", region: "Europe" },
+            { code: "VNO", name: "Vilnius", lat: 54.6341, lon: 25.2858, city: "Vilnius", country: "Lithuania", region: "Europe" },
+
+            // New North American Airports
+            { code: "DEN", name: "Denver Intl", lat: 39.8561, lon: -104.6737, city: "Denver", country: "USA", region: "Americas" },
+            { code: "PHX", name: "Phoenix Sky Harbor Intl", lat: 33.4342, lon: -112.0116, city: "Phoenix", country: "USA", region: "Americas" },
+            { code: "SEA", name: "Seattle-Tacoma Intl", lat: 47.4490, lon: -122.3093, city: "Seattle", country: "USA", region: "Americas" },
+            { code: "BOS", name: "Logan Intl", lat: 42.3643, lon: -71.0052, city: "Boston", country: "USA", region: "Americas" },
+            { code: "ATL", name: "Hartsfield-Jackson Atlanta Intl", lat: 33.6367, lon: -84.4281, city: "Atlanta", country: "USA", region: "Americas" },
+            { code: "IAD", name: "Washington Dulles Intl", lat: 38.9445, lon: -77.4558, city: "Washington DC", country: "USA", region: "Americas" },
+            { code: "LAS", name: "Harry Reid Intl", lat: 36.0801, lon: -115.1522, city: "Las Vegas", country: "USA", region: "Americas" },
+            { code: "MSY", name: "Louis Armstrong New Orleans Intl", lat: 29.9934, lon: -90.2580, city: "New Orleans", country: "USA", region: "Americas" },
+            { code: "STL", name: "St. Louis Lambert Intl", lat: 38.7487, lon: -90.3700, city: "St Louis", country: "USA", region: "Americas" },
+            { code: "MCI", name: "Kansas City Intl", lat: 39.2976, lon: -94.7139, city: "Kansas City", country: "USA", region: "Americas" },
+            { code: "YUL", name: "Montréal-Pierre Elliott Trudeau Intl", lat: 45.4706, lon: -73.7408, city: "Montreal", country: "Canada", region: "Americas" },
+            { code: "YEG", name: "Edmonton Intl", lat: 53.3097, lon: -113.5797, city: "Edmonton", country: "Canada", region: "Americas" },
+            { code: "YYC", name: "Calgary Intl", lat: 51.1139, lon: -114.0195, city: "Calgary", country: "Canada", region: "Americas" },
+
+            // New Pacific Islands Airports
+            { code: "NAN", name: "Nadi Intl", lat: -17.7553, lon: 177.4430, city: "Nadi", country: "Fiji", region: "Oceania" },
+            { code: "PPT", name: "Faa'a Intl", lat: -17.5539, lon: -149.6074, city: "Tahiti", country: "French Polynesia", region: "Oceania" },
+            { code: "APW", name: "Faleolo Intl", lat: -13.8317, lon: -171.9972, city: "Apia", country: "Samoa", region: "Oceania" },
+            { code: "HNL", name: "Daniel K. Inouye Intl", lat: 21.3187, lon: -157.9225, city: "Honolulu", country: "USA", region: "Oceania" },
+            { code: "GUM", name: "Antonio B. Won Pat Intl", lat: 13.4834, lon: 144.7960, city: "Tamuning", country: "Guam", region: "Oceania" }
+
         ];
 
         const PRESET_ROUTES = [
@@ -662,17 +695,17 @@
               svg: `<img src="https://i.ibb.co/HfN2Vpnp/eurofighter-typhoon.png" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6));" />`
             },
             // PRIVATE
-            { id: 'g650', type: 'private', speed: 900, name: 'Gulfstream G650', desc: 'Ultra-long range luxury business jet, sleek swept wings', best: 'Best for Luxury', 
-              svg: `<svg viewBox="-24 -24 48 48" xmlns="http://www.w3.org/2000/svg"><path d="M-2,-20 C-2,-23 2,-23 2,-20 L2,-2 L18,12 L18,15 L2,8 L2,18 L7,23 L7,24 L-7,24 L-7,23 L-2,18 L-2,8 L-18,15 L-18,12 L-2,-2 Z" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5" stroke-linejoin="round"/></svg>`
-            },
             { id: 'cx', type: 'private', speed: 950, name: 'Cessna Citation X', desc: 'One of the fastest civilian jets, steeply swept wings', best: 'Best for Speed', 
-              svg: `<svg viewBox="-24 -24 48 48" xmlns="http://www.w3.org/2000/svg"><path d="M-1.5,-18 C-1.5,-21 1.5,-21 1.5,-18 L1.5,-2 L15,10 L15,13 L1.5,7 L1.5,17 L6,21 L6,23 L-6,23 L-6,21 L-1.5,17 L-1.5,7 L-15,13 L-15,10 L-1.5,-2 Z" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5" stroke-linejoin="round"/></svg>`
+              svg: `<img src="https://i.ibb.co/twJ3HPLH/cessna-citation-x.png" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6));" />`
             },
-            { id: 'bd7500', type: 'private', speed: 890, name: 'Bombardier Global 7500', desc: 'Long range, high-speed, four living spaces', best: 'Best for Long Haul', 
-              svg: `<svg viewBox="-24 -24 48 48" xmlns="http://www.w3.org/2000/svg"><path d="M-2.5,-22 C-2.5,-25 2.5,-25 2.5,-22 L2.5,0 L20,12 L20,15 L2.5,8 L2.5,18 L8,24 L8,26 L-8,26 L-8,24 L-2.5,18 L-2.5,8 L-20,15 L-20,12 L-2.5,0 Z" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5" stroke-linejoin="round"/></svg>`
+            { id: 'phenom300', type: 'private', speed: 850, name: 'Embraer Phenom 300', desc: 'Light jet, highly popular for short regional hops', best: 'Best for Short Haul', 
+              svg: `<img src="https://i.ibb.co/DDkJ90wR/embraer-phenom-300.png" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6));" />`
             },
-            { id: 'phenom300', type: 'private', speed: 830, name: 'Embraer Phenom 300', desc: 'Light jet, fast and efficient, winglets', best: 'Best for Short Haul', 
-              svg: `<svg viewBox="-24 -24 48 48" xmlns="http://www.w3.org/2000/svg"><path d="M-2,-16 C-2,-19 2,-19 2,-16 L2,2 L14,14 L14,16 L2,10 L2,18 L6,22 L6,24 L-6,24 L-6,22 L-2,18 L-2,10 L-14,16 L-14,14 L-2,2 Z" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5" stroke-linejoin="round"/></svg>`
+            { id: 'g650', type: 'private', speed: 900, name: 'Gulfstream G650', desc: 'Ultra-long range luxury business jet, sleek swept wings', best: 'Best for Luxury', 
+              svg: `<img src="https://i.ibb.co/27RxX2yf/gulfstream-g650.png" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6));" />`
+            },
+            { id: 'global7500', type: 'private', speed: 900, name: 'Bombardier Global 7500', desc: 'Top tier long range private jet with spacious cabin', best: 'Best for Ultra Long Haul', 
+              svg: `<img src="https://i.ibb.co/qLkRbgXQ/bomobardier-7500-global.png" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.6));" />`
             }
         ];
 
@@ -861,25 +894,20 @@
         function calculateFlightDetails(lat1, lon1, lat2, lon2) {
             const distKm = haversine(lat1, lon1, lat2, lon2);
             
-            let min = 15;
-            if (distKm <= 500) min = 15 + (distKm / 500) * 5; 
-            else if (distKm <= 1500) min = 20 + ((distKm - 500) / 1000) * 10;
-            else if (distKm <= 4000) min = 30 + ((distKm - 1500) / 2500) * 15;
-            else if (distKm <= 8000) min = 45 + ((distKm - 4000) / 4000) * 15;
-            else min = 60 + ((distKm - 8000) / 4000) * 15;
+            let min = Math.round((distKm / 50) + 10);
             
             let roundedMin = Math.round(min / 5) * 5;
             if (roundedMin < 15) roundedMin = 15;
-            if (roundedMin > 90) roundedMin = 90;
+            if (roundedMin > 180) roundedMin = 180;
 
             let tierLabel = "";
             let color = "var(--accent)";
             let isUltraSpecial = false;
             
             if (roundedMin <= 25) { tierLabel = "Short Haul"; color = "#3b82f6"; } // blueish
-            else if (roundedMin <= 35) { tierLabel = "Medium Haul"; color = "#10b981"; } // green
-            else if (roundedMin <= 55) { tierLabel = "Long Haul"; color = "#8b5cf6"; } // purple
-            else if (roundedMin <= 75) { tierLabel = "Ultra Long Haul"; color = "#f43f5e"; } // rose
+            else if (roundedMin <= 45) { tierLabel = "Medium Haul"; color = "#10b981"; } // green
+            else if (roundedMin <= 75) { tierLabel = "Long Haul"; color = "#8b5cf6"; } // purple
+            else if (roundedMin <= 120) { tierLabel = "Ultra Long Haul"; color = "#f43f5e"; } // rose
             else { tierLabel = "Event Horizon ✦"; color = "#fbbf24"; isUltraSpecial = true; } // gold
             
             return {
@@ -1393,12 +1421,8 @@
                 FlightContext.currentFlight.totalMs = FlightContext.currentFlight.min * 60 * 1000;
                 
                 FlightContext.pendingBreaks = [];
-                if (FlightContext.currentFlight.min >= 60) {
-                    let numBreaks = FlightContext.currentFlight.isUltra ? 4 : 2;
-                    let total = FlightContext.currentFlight.totalMs;
-                    for (let i = 1; i <= numBreaks; i++) {
-                        FlightContext.pendingBreaks.push(total * (i / (numBreaks + 1)));
-                    }
+                if (FlightContext.currentFlight.min >= 90) {
+                    FlightContext.pendingBreaks.push(FlightContext.currentFlight.totalMs * 0.5);
                 }
                 
                 checkAndRequestNotification();
@@ -1799,13 +1823,55 @@
                 osc.start();
                 osc.stop(audioCtx.currentTime + 1.5);
             }
-            startBreak(5, 'resumeFlight');
+            
+            // Find mid point 
+            let p1 = getAirport(FlightContext.currentFlight.from);
+            let p2 = getAirport(FlightContext.currentFlight.to);
+            let midLat = (p1.lat + p2.lat) / 2;
+            let midLon = (p1.lon + p2.lon) / 2;
+            
+            let nearest = AIRPORTS.reduce((prev, curr) => {
+                let dPrev = haversine(midLat, midLon, prev.lat, prev.lon);
+                let dCurr = haversine(midLat, midLon, curr.lat, curr.lon);
+                return (dCurr < dPrev) ? curr : prev;
+            });
+
+            FlightContext.afterBreakAction = 'resumeFlight';
+            FlightContext.breakStartTime = Date.now();
+            FlightContext.breakEndTime = Date.now() + 5 * 60 * 1000;
+            
+            showView('view-break');
+            
+            document.getElementById('break-title').innerText = "Mid-Flight Layover";
+            document.getElementById('break-subtitle').innerText = `Refueling stop at ${nearest.city || nearest.name}`;
+            
+            document.getElementById('fuel-gauge').classList.remove('hidden');
+            let fuelLevel = document.getElementById('fuel-level');
+            fuelLevel.style.transition = 'none';
+            fuelLevel.style.height = '0%';
+            setTimeout(() => {
+                fuelLevel.style.transition = 'height 300s linear';
+                fuelLevel.style.height = '100%';
+            }, 50);
+
+            document.getElementById('btn-end-break').style.opacity = '0';
+            document.getElementById('btn-end-break').style.pointerEvents = 'none';
+            document.getElementById('break-mandatory-text').classList.remove('hidden');
+            
+            updateBreakHUD();
         }
 
         function finishBreak() {
             if (document.getElementById('view-break').classList.contains('hidden')) return;
+            document.getElementById('fuel-gauge').classList.add('hidden');
+            document.getElementById('break-mandatory-text').classList.add('hidden');
+            document.getElementById('break-subtitle').innerText = '';
+            document.getElementById('btn-end-break').style.opacity = '1';
+            document.getElementById('btn-end-break').style.pointerEvents = 'auto';
+
             if (FlightContext.afterBreakAction === 'resumeFlight') {
                 showView('view-hud');
+                document.getElementById('flight-map-controls').classList.remove('hidden');
                 setPausedState(false);
             } else {
                 setupRouteView();
@@ -1818,6 +1884,23 @@
             
             let s = Math.ceil(rem/1000);
             document.getElementById('break-time').innerText = String(Math.floor(s/60)).padStart(2,'0') + ":" + String(s%60).padStart(2,'0');
+
+            if (FlightContext.afterBreakAction === 'resumeFlight' && FlightContext.breakStartTime) {
+                let elapsedBreakS = Math.floor((Date.now() - FlightContext.breakStartTime) / 1000);
+                let mandatoryS = 120; // 2 minutes
+                
+                if (elapsedBreakS < mandatoryS) {
+                    let diff = mandatoryS - elapsedBreakS;
+                    document.getElementById('break-skip-time').innerText = String(Math.floor(diff/60)).padStart(2,'0') + ":" + String(diff%60).padStart(2,'0');
+                } else {
+                    document.getElementById('break-mandatory-text').classList.add('hidden');
+                    document.getElementById('btn-end-break').style.opacity = '1';
+                    document.getElementById('btn-end-break').style.pointerEvents = 'auto';
+                }
+            } else {
+                document.getElementById('btn-end-break').style.opacity = '1';
+                document.getElementById('btn-end-break').style.pointerEvents = 'auto';
+            }
             
             if (s > 0) {
                 setTimeout(updateBreakHUD, 1000);
@@ -2112,6 +2195,11 @@
             }, 50);
         }
 
+        function fuzzyMatch(str, pattern) {
+            pattern = pattern.split("").reduce(function(a,b){ return a+".*"+b; });
+            return (new RegExp(pattern, 'i')).test(str);
+        }
+
         function initSearch(inputId, resultsId, type) {
             let input = document.getElementById(inputId);
             let results = document.getElementById(resultsId);
@@ -2119,7 +2207,7 @@
             
             input.addEventListener('input', (e) => {
                 clearTimeout(debounceTimer);
-                let val = e.target.value.toLowerCase();
+                let val = e.target.value.toLowerCase().trim();
                 
                 debounceTimer = setTimeout(() => {
                     results.innerHTML = '';
@@ -2128,10 +2216,37 @@
                         return;
                     }
                     
-                    let matches = AIRPORTS.filter(ap => 
-                        ap.code.toLowerCase().includes(val) || 
-                        ap.name.toLowerCase().includes(val)
-                    ).slice(0, 5);
+                    let scoredMatches = AIRPORTS.map(ap => {
+                        let score = 0;
+                        let codeLower = ap.code.toLowerCase();
+                        let nameLower = ap.name.toLowerCase();
+                        let cityLower = (ap.city || "").toLowerCase();
+                        let countryLower = (ap.country || "").toLowerCase();
+                        
+                        if (codeLower === val) score += 100;
+                        else if (codeLower.startsWith(val)) score += 50;
+                        else if (fuzzyMatch(codeLower, val)) score += 10;
+                        
+                        if (nameLower === val) score += 90;
+                        else if (nameLower.startsWith(val)) score += 40;
+                        else if (nameLower.includes(val)) score += 20;
+                        else if (fuzzyMatch(nameLower, val)) score += 5;
+
+                        if (cityLower === val) score += 80;
+                        else if (cityLower.startsWith(val)) score += 30;
+                        else if (cityLower.includes(val)) score += 15;
+                        else if (fuzzyMatch(cityLower, val)) score += 5;
+
+                        if (countryLower === val) score += 70;
+                        else if (countryLower.startsWith(val)) score += 25;
+                        else if (countryLower.includes(val)) score += 10;
+                        else if (fuzzyMatch(countryLower, val)) score += 2;
+
+                        return { airport: ap, score: score };
+                    }).filter(item => item.score > 0);
+                    
+                    scoredMatches.sort((a, b) => b.score - a.score);
+                    let matches = scoredMatches.slice(0, 8).map(item => item.airport);
                     
                     if (matches.length === 0) {
                         results.classList.add('hidden');
@@ -2142,7 +2257,7 @@
                     matches.forEach(ap => {
                         let div = document.createElement('div');
                         div.className = "search-item";
-                        div.innerText = `${ap.code} - ${ap.name}`;
+                        div.innerHTML = `<div style="font-weight:bold;">${ap.code} - ${ap.name}</div><div style="font-size:0.8em;opacity:0.7;">${ap.city || ""}, ${ap.country || ""}</div>`;
                         div.onmousedown = (ev) => {
                             ev.preventDefault(); 
                             input.value = `${ap.code} - ${ap.name}`;
@@ -2163,6 +2278,63 @@
 
             input.addEventListener('blur', () => setTimeout(() => results.classList.add('hidden'), 100));
             input.addEventListener('focus', () => { if(input.value.length >= 2) results.classList.remove('hidden'); });
+        }
+
+        let currentModalTarget = null;
+        function showAllAirportsModal(target) {
+            currentModalTarget = target;
+            let modal = document.getElementById('all-airports-modal');
+            let list = document.getElementById('all-airports-list');
+            list.innerHTML = '';
+            
+            let grouped = {};
+            AIRPORTS.forEach(ap => {
+                let r = ap.region || "Other";
+                if(!grouped[r]) grouped[r] = [];
+                grouped[r].push(ap);
+            });
+            
+            let regions = Object.keys(grouped).sort();
+            regions.forEach(r => {
+                let h = document.createElement('h3');
+                h.innerText = r;
+                h.style.color = 'var(--accent)';
+                h.style.marginTop = '15px';
+                h.style.marginBottom = '5px';
+                list.appendChild(h);
+                
+                grouped[r].sort((a,b) => (a.city||"").localeCompare((b.city||"")) || a.name.localeCompare(b.name)).forEach(ap => {
+                    let div = document.createElement('div');
+                    div.style.padding = '8px';
+                    div.style.cursor = 'pointer';
+                    div.style.borderBottom = '1px solid var(--border-light)';
+                    div.innerHTML = `<strong style="color:var(--text-main);">${ap.code}</strong> ${ap.name} <span style="opacity:0.6;font-size:0.85em;">(${ap.city||""}, ${ap.country||""})</span>`;
+                    div.onclick = () => {
+                        let inputId = target === 'from' ? 'search-dept' : 'search-arr';
+                        let resultsId = target === 'from' ? 'search-results-dept' : 'search-results-arr';
+                        document.getElementById(inputId).value = `${ap.code} - ${ap.name}`;
+                        document.getElementById(resultsId).classList.add('hidden');
+                        
+                        if (target === 'from') {
+                            pendingRoute.from = ap.code;
+                        } else {
+                            pendingRoute.to = ap.code;
+                        }
+                        redrawMarkers();
+                        tryCompleteRoute();
+                        closeAllAirportsModal();
+                    };
+                    div.onmouseover = () => div.style.background = 'rgba(255,255,255,0.05)';
+                    div.onmouseout = () => div.style.background = 'transparent';
+                    list.appendChild(div);
+                });
+            });
+            
+            modal.style.display = 'flex';
+        }
+        
+        function closeAllAirportsModal() {
+            document.getElementById('all-airports-modal').style.display = 'none';
         }
 
         function attachEvents() {
