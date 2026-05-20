@@ -264,7 +264,7 @@
         </div>
 
         <div style="text-align: center; margin-bottom: 10px;">
-            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.1.6</span></h1>
+            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.1.8</span></h1>
         </div>
 
         <!-- Views -->
@@ -367,7 +367,11 @@
             </div>
             
             <div id="hud" style="margin-top: 15px;">
-                <div><div class="hud-label" id="hud-time-label">TIME REMAINING</div><div class="hud-value" id="hud-time">45:00</div></div>
+                <div>
+                    <div class="hud-label" id="hud-time-label">TIME REMAINING</div>
+                    <div class="hud-value" id="hud-time">45:00</div>
+                    <div id="hud-break-indicator" style="font-size: 0.75em; color: var(--accent); margin-top: 4px; opacity: 0.8; display: none;"></div>
+                </div>
                 <div><div class="hud-label">ALTITUDE</div><div class="hud-value" id="hud-alt">0 ft</div></div>
                 <div><div class="hud-label">SPEED</div><div class="hud-value" id="hud-speed">0 kts</div></div>
                 <div><div class="hud-label">DEST TIME</div><div class="hud-value" id="hud-dest-time">--:--</div></div>
@@ -412,18 +416,26 @@
             <h2 id="break-title">Layover</h2>
             <div id="break-subtitle" style="color: var(--text-dim); margin-bottom: 20px;"></div>
             
-            <div id="fuel-gauge" class="hidden" style="margin: 0 auto 10px auto; width: 60px; height: 60px; position: relative;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%; height:100%; color: var(--accent);">
-                    <rect x="4" y="6" width="16" height="15" rx="2" ry="2"></rect>
-                    <line x1="4" y1="10" x2="20" y2="10"></line>
-                    <path d="M7 6V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v2"></path>
-                </svg>
-                <div id="fuel-level" style="position: absolute; bottom: 3px; left: 4px; right: 4px; height: 0%; background: rgba(59,130,246,0.3); transition: height 1s linear;"></div>
+            <div id="break-options" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                <button class="btn" onclick="selectBreak(5)" style="border: 1px solid #06b6d4;">Quick Stretch (5 min)</button>
+                <button class="btn" onclick="selectBreak(15)" style="border: 1px solid var(--border);">Standard Break (15 min)</button>
+                <button class="btn" onclick="selectBreak(30)" style="border: 1px solid #f59e0b;">Long Break (30 min)</button>
             </div>
 
-            <div class="hud-value" id="break-time" style="font-size: 3em; margin: 20px 0;">05:00</div>
-            <button class="btn" id="btn-end-break" style="transition: opacity 0.3s; opacity: 1;">End Break</button>
-            <div id="break-mandatory-text" class="hidden" style="font-size: 0.8em; color: var(--text-dim); margin-top: 10px;">Mandatory break. You can skip in <span id="break-skip-time">2:00</span></div>
+            <div id="break-timer-container" class="hidden">
+                <div id="fuel-gauge" class="hidden" style="margin: 0 auto 10px auto; width: 60px; height: 60px; position: relative;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%; height:100%; color: var(--accent);">
+                        <rect x="4" y="6" width="16" height="15" rx="2" ry="2"></rect>
+                        <line x1="4" y1="10" x2="20" y2="10"></line>
+                        <path d="M7 6V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v2"></path>
+                    </svg>
+                    <div id="fuel-level" style="position: absolute; bottom: 3px; left: 4px; right: 4px; height: 0%; background: rgba(59,130,246,0.3); transition: height 1s linear;"></div>
+                </div>
+
+                <div class="hud-value" id="break-time" style="font-size: 3em; margin: 20px 0;">05:00</div>
+                <button class="btn" id="btn-end-break" style="transition: opacity 0.3s; opacity: 1;">Skip Break</button>
+                <div id="break-mandatory-text" class="hidden" style="font-size: 0.8em; color: var(--text-dim); margin-top: 10px;">Mandatory break. You can skip in <span id="break-skip-time">2:00</span></div>
+            </div>
         </div>
 
         <div class="card">
@@ -731,6 +743,7 @@
         };
 
         let map, pathLine, mapMode = false, mapSelections = [];
+        let baseAirportsLayer = null;
         let pendingRoute = { from: null, to: null };
         let connectedAirport = null;
         let audioCtx = null;
@@ -852,12 +865,79 @@
 
         // INIT
         function init() {
+            if (checkSavedBreakState()) {
+                loadProfile();
+                attachEvents();
+                return;
+            }
             setupRouteView();
             loadProfile();
             attachEvents();
         }
 
         // MAP LOGIC
+        function drawBaseAirports() {
+            if (baseAirportsLayer) {
+                baseAirportsLayer.remove();
+            }
+            baseAirportsLayer = L.layerGroup();
+
+            AIRPORTS.forEach(ap => {
+                // The visual dot
+                let dot = L.circleMarker([ap.lat, ap.lon], {
+                    radius: 3, 
+                    color: 'rgba(255,255,255,0.4)', 
+                    fillColor: 'rgba(255,255,255,0.4)', 
+                    fillOpacity: 0.5, 
+                    weight: 1,
+                    isBaseAirport: true,
+                    interactive: false
+                });
+                baseAirportsLayer.addLayer(dot);
+
+                // The interactive sphere (larger hover/click area)
+                let hitArea = L.circleMarker([ap.lat, ap.lon], {
+                    radius: 20, 
+                    color: 'transparent', 
+                    fillColor: 'rgba(255,255,255,0.1)', 
+                    fillOpacity: 0, 
+                    weight: 0,
+                    isBaseAirport: true
+                });
+
+                hitArea.on('mouseover', function() {
+                    this.setStyle({ fillOpacity: 0.15, color: 'rgba(255,255,255,0.3)', weight: 1 });
+                });
+                hitArea.on('mouseout', function() {
+                    this.setStyle({ fillOpacity: 0, color: 'transparent', weight: 0 });
+                });
+
+                hitArea.on('click', function(e) {
+                    handleAirportSelectionFromMap(ap);
+                    L.DomEvent.stopPropagation(e);
+                });
+
+                baseAirportsLayer.addLayer(hitArea);
+            });
+        }
+
+        function updateBaseAirportsVisibility() {
+            if (!baseAirportsLayer || !map) return;
+            
+            let isSetupView = !document.getElementById('view-setup').classList.contains('hidden');
+            let isSelecting = !pendingRoute.from || !pendingRoute.to;
+            
+            if (isSetupView && isSelecting) {
+                if (!map.hasLayer(baseAirportsLayer)) {
+                    map.addLayer(baseAirportsLayer);
+                }
+            } else {
+                if (map.hasLayer(baseAirportsLayer)) {
+                    map.removeLayer(baseAirportsLayer);
+                }
+            }
+        }
+
         function initMap() {
             if (map) {
                 map.off();
@@ -880,10 +960,14 @@
                 labelsLayer.addTo(map);
             }
 
+            drawBaseAirports();
+
             map.on('dragstart', () => { autoFollow = false; clearAutoFollow(); });
             map.on('zoomstart', () => { autoFollow = false; clearAutoFollow(); });
 
             map.on('click', handleMapClick);
+            
+            updateBaseAirportsVisibility();
         }
 
         function haversine(lat1, lon1, lat2, lon2) {
@@ -912,14 +996,15 @@
             if (roundedMin <= 25) { tierLabel = "Short Haul"; color = "#3b82f6"; } // blueish
             else if (roundedMin <= 45) { tierLabel = "Medium Haul"; color = "#10b981"; } // green
             else if (roundedMin <= 75) { tierLabel = "Long Haul"; color = "#8b5cf6"; } // purple
-            else if (roundedMin <= 120) { tierLabel = "Ultra Long Haul"; color = "#f43f5e"; } // rose
+            else if (roundedMin <= 95) { tierLabel = "Ultra Long Haul"; color = "#f43f5e"; } // rose
+            else if (roundedMin <= 120) { tierLabel = "Transcontinental"; color = "#ec4899"; } // pink
             else { tierLabel = "Event Horizon ✦"; color = "#fbbf24"; isUltraSpecial = true; } // gold
             
             let numBreaks = 0;
             let breakDuration = 5;
-            if (roundedMin > 40) {
-                numBreaks = Math.floor((roundedMin - 1) / 40);
-            }
+            if (roundedMin >= 46 && roundedMin <= 75) numBreaks = 1;
+            else if (roundedMin >= 76 && roundedMin <= 120) numBreaks = 2;
+            else if (roundedMin > 120) numBreaks = 3;
 
             return {
                 min: roundedMin,
@@ -931,6 +1016,19 @@
                 numBreaks: numBreaks,
                 breakDuration: breakDuration
             };
+        }
+
+        function handleAirportSelectionFromMap(nearest) {
+            if (!pendingRoute.from) {
+                pendingRoute.from = nearest.code;
+                document.getElementById('search-dept').value = `${nearest.code} - ${nearest.name}`;
+                redrawMarkers();
+            } else if (!pendingRoute.to && nearest.code !== pendingRoute.from) {
+                pendingRoute.to = nearest.code;
+                document.getElementById('search-arr').value = `${nearest.code} - ${nearest.name}`;
+                redrawMarkers();
+                tryCompleteRoute();
+            }
         }
 
         function handleMapClick(e) {
@@ -945,16 +1043,7 @@
             });
 
             if (minDist <= 150) {
-                if (!pendingRoute.from) {
-                    pendingRoute.from = nearest.code;
-                    document.getElementById('search-dept').value = `${nearest.code} - ${nearest.name}`;
-                    redrawMarkers();
-                } else if (!pendingRoute.to && nearest.code !== pendingRoute.from) {
-                    pendingRoute.to = nearest.code;
-                    document.getElementById('search-arr').value = `${nearest.code} - ${nearest.name}`;
-                    redrawMarkers();
-                    tryCompleteRoute();
-                }
+                handleAirportSelectionFromMap(nearest);
             }
         }
 
@@ -989,7 +1078,7 @@
                 let breakEl = document.getElementById('live-breaks');
                 if (details.numBreaks > 0) {
                     breakEl.style.display = 'inline';
-                    breakEl.innerText = `Includes ${details.numBreaks} mid-flight layover${details.numBreaks > 1 ? 's' : ''} (${details.breakDuration}m each)`;
+                    breakEl.innerText = `Includes ${details.numBreaks} mid-flight layover${details.numBreaks > 1 ? 's' : ''}`;
                 } else {
                     breakEl.style.display = 'none';
                 }
@@ -1026,6 +1115,7 @@
                     map.flyToBounds(L.latLngBounds(pts), {padding: [50, 50], maxZoom: 6, duration: 1.5});
                 }
             }
+            updateBaseAirportsVisibility();
         }
 
         function toggleMapMode() {
@@ -1079,7 +1169,7 @@
                 document.getElementById('connected-flight-label').classList.remove('hidden');
                 document.getElementById('connected-airport-code').innerText = connectedAirport.code;
                 
-                L.marker([connectedAirport.lat, connectedAirport.lon]).addTo(map).bindTooltip(`${connectedAirport.code} - ${connectedAirport.name}`, {permanent: true, direction: 'top', className: 'airport-tooltip'});
+                L.marker([connectedAirport.lat, connectedAirport.lon]).addTo(map).bindTooltip(`Continuing from: ${connectedAirport.code} - ${connectedAirport.name}`, {direction: 'top', className: 'airport-tooltip'});
                 map.flyTo([connectedAirport.lat, connectedAirport.lon], 5, {duration: 1});
             } else {
                 document.getElementById('search-dept').disabled = false;
@@ -1111,7 +1201,7 @@
             });
             
             // Define order for tiers
-            const tierOrder = ["Short Haul", "Medium Haul", "Long Haul", "Ultra Long Haul", "Event Horizon ✦"];
+            const tierOrder = ["Short Haul", "Medium Haul", "Long Haul", "Ultra Long Haul", "Transcontinental", "Event Horizon ✦"];
             
             tierOrder.forEach(tier => {
                 if (grouped[tier] && grouped[tier].length > 0) {
@@ -1129,6 +1219,7 @@
                     else if (tier === "Medium Haul") h3.style.color = "#10b981";
                     else if (tier === "Long Haul") h3.style.color = "#8b5cf6";
                     else if (tier === "Ultra Long Haul") h3.style.color = "#f43f5e";
+                    else if (tier === "Transcontinental") h3.style.color = "#ec4899";
                     
                     list.appendChild(h3);
                     
@@ -1148,8 +1239,10 @@
                             div.style.borderLeft = "3px solid #8b5cf6";
                         } else if (tier === "Ultra Long Haul") {
                             div.style.borderLeft = "3px solid #f43f5e";
+                        } else if (tier === "Transcontinental") {
+                            div.style.borderLeft = "3px solid #ec4899";
                         }
-                        let breakInfo = r.numBreaks > 0 ? ` <span style="font-size: 0.8em; color: var(--accent); opacity: 0.8;">(has ${r.numBreaks} ${r.numBreaks > 1 ? 'breaks' : 'break'}, ${r.breakDuration}m each)</span>` : '';
+                        let breakInfo = r.numBreaks > 0 ? ` <span style="font-size: 0.8em; color: var(--accent); opacity: 0.8;">(has ${r.numBreaks} ${r.numBreaks > 1 ? 'breaks' : 'break'})</span>` : '';
                         div.innerHTML = `<span>${fromName} (${r.from}) ✈️ ${toName} (${r.to})${breakInfo}</span>`;
                         div.onclick = () => selectRoute(r);
                         list.appendChild(div);
@@ -1166,6 +1259,7 @@
             if (!map) return;
             map.eachLayer(layer => {
                 if (layer instanceof L.TileLayer) return;
+                if (layer.options && layer.options.isBaseAirport) return;
                 map.removeLayer(layer);
             });
         }
@@ -1198,8 +1292,8 @@
             
             resetMap();
             
-            L.marker([p1.lat, p1.lon]).addTo(map).bindTooltip(`${p1.code} - ${p1.name}`, {permanent: true, direction: 'top', className: 'airport-tooltip'});
-            L.marker([p2.lat, p2.lon]).addTo(map).bindTooltip(`${p2.code} - ${p2.name}`, {permanent: true, direction: 'top', className: 'airport-tooltip'});
+            L.marker([p1.lat, p1.lon]).addTo(map).bindTooltip(`Departure: ${p1.code} - ${p1.name}`, {direction: 'top', className: 'airport-tooltip'});
+            L.marker([p2.lat, p2.lon]).addTo(map).bindTooltip(`Arrival: ${p2.code} - ${p2.name}`, {direction: 'top', className: 'airport-tooltip'});
             
             // Curve
             let latlngs = [];
@@ -1329,7 +1423,7 @@
             let bpBreaks = document.getElementById('bp-breaks');
             if (FlightContext.currentFlight.numBreaks > 0) {
                 bpBreaks.style.display = 'block';
-                bpBreaks.innerText = FlightContext.currentFlight.numBreaks + " Layover" + (FlightContext.currentFlight.numBreaks > 1 ? 's' : '') + " (" + FlightContext.currentFlight.breakDuration + "m each)";
+                bpBreaks.innerText = FlightContext.currentFlight.numBreaks + " Layover" + (FlightContext.currentFlight.numBreaks > 1 ? 's' : '');
             } else {
                 bpBreaks.style.display = 'none';
             }
@@ -1376,7 +1470,10 @@
             }
             checkDashboardCollapseLayout();
             if (map) {
-                setTimeout(() => map.invalidateSize(), 300);
+                setTimeout(() => {
+                    map.invalidateSize();
+                    updateBaseAirportsVisibility();
+                }, 300);
             }
         }
 
@@ -1522,6 +1619,8 @@
             
             let remS = Math.max(0, Math.ceil((FlightContext.currentFlight.totalMs - elapsed)/1000));
             let timeLabel = document.getElementById('hud-time-label');
+            let breakIndEl = document.getElementById('hud-break-indicator');
+            
             if (nextBreakMs) {
                 let toLayoverS = Math.max(0, Math.ceil((nextBreakMs - elapsed)/1000));
                 timeLabel.innerText = "TIME TO LAYOVER";
@@ -1529,6 +1628,16 @@
             } else {
                 timeLabel.innerText = "TIME REMAINING";
                 document.getElementById('hud-time').innerText = String(Math.floor(remS/60)).padStart(2,'0') + ":" + String(remS%60).padStart(2,'0');
+            }
+            
+            if (FlightContext.currentFlight && FlightContext.currentFlight.numBreaks > 0) {
+                let totalSegs = FlightContext.currentFlight.numBreaks + 1;
+                let curSeg = totalSegs - FlightContext.pendingBreaks.length;
+                let dots = Array.from({length: totalSegs}, (_, i) => i < curSeg ? '●' : '○').join(' ');
+                breakIndEl.style.display = 'block';
+                breakIndEl.innerText = `Segment ${curSeg} of ${totalSegs}   ${dots}`;
+            } else {
+                breakIndEl.style.display = 'none';
             }
 
             // Simulate Alt/Speed based on HUD progress
@@ -1861,9 +1970,16 @@
         function startBreak(mins, customAction = 'setup') {
             FlightContext.afterBreakAction = customAction;
             showView('view-break');
+            
+            document.getElementById('break-options').style.display = 'none';
+            document.getElementById('break-timer-container').classList.remove('hidden');
+            
             let h2 = document.querySelector('#view-break h2');
             if (h2) h2.innerText = customAction === 'resumeFlight' ? "In-Flight Rest" : "Layover";
+            
+            FlightContext.breakStartTime = Date.now();
             FlightContext.breakEndTime = Date.now() + mins * 60 * 1000;
+            saveBreakState();
             updateBreakHUD();
         }
 
@@ -1897,27 +2013,107 @@
             });
 
             FlightContext.afterBreakAction = 'resumeFlight';
-            FlightContext.breakStartTime = Date.now();
-            FlightContext.breakEndTime = Date.now() + 5 * 60 * 1000;
             
             showView('view-break');
             
             document.getElementById('break-title').innerText = "Mid-Flight Layover";
             document.getElementById('break-subtitle').innerText = `Refueling stop at ${nearest.city || nearest.name}`;
             
+            document.getElementById('break-options').style.display = 'flex';
+            document.getElementById('break-timer-container').classList.add('hidden');
+            
             document.getElementById('fuel-gauge').classList.remove('hidden');
+            
+            // clear old state so it doesn't auto resume if we crash now
+            localStorage.removeItem('FlightTracker_BreakState');
+        }
+
+        function saveBreakState() {
+            if (FlightContext.breakEndTime) {
+                localStorage.setItem('FlightTracker_BreakState', JSON.stringify(FlightContext));
+            }
+        }
+
+        function checkSavedBreakState() {
+            try {
+                let saved = localStorage.getItem('FlightTracker_BreakState');
+                if (saved) {
+                    let st = JSON.parse(saved);
+                    if (st.breakEndTime && st.breakStartTime && st.currentFlight) {
+                        if (Date.now() < st.breakEndTime || Date.now() < st.breakStartTime + 120000) {
+                            Object.assign(FlightContext, st);
+                            
+                            // Restore visual state
+                            let p1 = getAirport(FlightContext.currentFlight.from);
+                            let ac = AIRCRAFT_DB.find(a => a.id === selectedAircraftId) || AIRCRAFT_DB[0];
+                            let overlayInner = document.getElementById('plane-overlay-inner');
+                            overlayInner.innerHTML = ac.svg;
+                            document.getElementById('plane-overlay').classList.remove('hidden');
+
+                            showView('view-break');
+                            document.getElementById('break-options').style.display = 'none';
+                            document.getElementById('break-timer-container').classList.remove('hidden');
+
+                            let h2 = document.querySelector('#view-break h2');
+                            if (h2) h2.innerText = st.afterBreakAction === 'resumeFlight' ? "In-Flight Rest" : "Layover";
+
+                            updateBreakHUD();
+                            return true;
+                        } else {
+                            // break expired
+                            localStorage.removeItem('FlightTracker_BreakState');
+                            
+                            Object.assign(FlightContext, st);
+
+                            // Restore visual state
+                            let p1 = getAirport(FlightContext.currentFlight.from);
+                            let ac = AIRCRAFT_DB.find(a => a.id === selectedAircraftId) || AIRCRAFT_DB[0];
+                            let overlayInner = document.getElementById('plane-overlay-inner');
+                            overlayInner.innerHTML = ac.svg;
+                            document.getElementById('plane-overlay').classList.remove('hidden');
+                            
+                            showView('view-break');
+                            document.getElementById('break-options').style.display = 'none';
+                            document.getElementById('break-timer-container').classList.remove('hidden');
+                            
+                            let h2 = document.querySelector('#view-break h2');
+                            if (h2) h2.innerText = "Break Complete";
+                            
+                            document.getElementById('break-time').innerText = "00:00";
+                            document.getElementById('btn-end-break').style.opacity = '1';
+                            document.getElementById('btn-end-break').style.pointerEvents = 'auto';
+                            document.getElementById('btn-end-break').innerText = "Resume Flight";
+                            document.getElementById('break-mandatory-text').classList.add('hidden');
+                            
+                            return true;
+                        }
+                    }
+                }
+            } catch (e) {}
+            return false;
+        }
+
+        function selectBreak(mins) {
+            document.getElementById('break-options').style.display = 'none';
+            document.getElementById('break-timer-container').classList.remove('hidden');
+            
+            FlightContext.breakStartTime = Date.now();
+            FlightContext.breakEndTime = Date.now() + mins * 60 * 1000;
+            saveBreakState();
+            
             let fuelLevel = document.getElementById('fuel-level');
             fuelLevel.style.transition = 'none';
             fuelLevel.style.height = '0%';
             setTimeout(() => {
-                fuelLevel.style.transition = 'height 300s linear';
+                fuelLevel.style.transition = `height ${mins * 60}s linear`;
                 fuelLevel.style.height = '100%';
             }, 50);
 
             document.getElementById('btn-end-break').style.opacity = '0';
             document.getElementById('btn-end-break').style.pointerEvents = 'none';
+            document.getElementById('btn-end-break').innerText = "Skip Break";
             document.getElementById('break-mandatory-text').classList.remove('hidden');
-            
+
             updateBreakHUD();
         }
 
@@ -1931,6 +2127,9 @@
             document.getElementById('break-subtitle').innerText = '';
             document.getElementById('btn-end-break').style.opacity = '1';
             document.getElementById('btn-end-break').style.pointerEvents = 'auto';
+            document.getElementById('btn-end-break').innerText = "End Break";
+            
+            localStorage.removeItem('FlightTracker_BreakState');
 
             if (FlightContext.afterBreakAction === 'resumeFlight') {
                 showView('view-hud');
