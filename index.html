@@ -250,7 +250,7 @@
             <button class="map-control-btn" id="btn-map-overview" data-tooltip="Overview"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></button>
             <button class="map-control-btn active" id="btn-map-labels" data-tooltip="Labels"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg></button>
         </div>
-        <div id="map-overlay-paused" class="hidden" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 999; display: flex; align-items: center; justify-content: center; font-size: 3em; font-weight: bold; color: var(--accent); text-shadow: 0 0 10px var(--accent); flex-direction: column; pointer-events: none;">
+        <div id="map-overlay-paused" class="hidden" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; font-size: 3em; font-weight: bold; color: var(--accent); text-shadow: 0 0 10px var(--accent); flex-direction: column; pointer-events: none;">
             <div style="font-size: 2em; margin-bottom: 20px;">⏸</div>
             <div>PAUSED</div>
         </div>
@@ -367,7 +367,7 @@
             </div>
             
             <div id="hud" style="margin-top: 15px;">
-                <div><div class="hud-label">TIME REMAINING</div><div class="hud-value" id="hud-time">45:00</div></div>
+                <div><div class="hud-label" id="hud-time-label">TIME REMAINING</div><div class="hud-value" id="hud-time">45:00</div></div>
                 <div><div class="hud-label">ALTITUDE</div><div class="hud-value" id="hud-alt">0 ft</div></div>
                 <div><div class="hud-label">SPEED</div><div class="hud-value" id="hud-speed">0 kts</div></div>
                 <div><div class="hud-label">DEST TIME</div><div class="hud-value" id="hud-dest-time">--:--</div></div>
@@ -1163,8 +1163,10 @@
         }
 
         function resetMap() {
+            if (!map) return;
             map.eachLayer(layer => {
-                if (layer instanceof L.Marker || layer instanceof L.Polyline) map.removeLayer(layer);
+                if (layer instanceof L.TileLayer) return;
+                map.removeLayer(layer);
             });
         }
 
@@ -1519,7 +1521,15 @@
             document.getElementById('hud-progress').style.width = (p*100) + "%";
             
             let remS = Math.max(0, Math.ceil((FlightContext.currentFlight.totalMs - elapsed)/1000));
-            document.getElementById('hud-time').innerText = String(Math.floor(remS/60)).padStart(2,'0') + ":" + String(remS%60).padStart(2,'0');
+            let timeLabel = document.getElementById('hud-time-label');
+            if (nextBreakMs) {
+                let toLayoverS = Math.max(0, Math.ceil((nextBreakMs - elapsed)/1000));
+                timeLabel.innerText = "TIME TO LAYOVER";
+                document.getElementById('hud-time').innerText = String(Math.floor(toLayoverS/60)).padStart(2,'0') + ":" + String(toLayoverS%60).padStart(2,'0');
+            } else {
+                timeLabel.innerText = "TIME REMAINING";
+                document.getElementById('hud-time').innerText = String(Math.floor(remS/60)).padStart(2,'0') + ":" + String(remS%60).padStart(2,'0');
+            }
 
             // Simulate Alt/Speed based on HUD progress
             let targetCrusingSpeedKts = (AIRCRAFT_DB.find(a => a.id === selectedAircraftId) || AIRCRAFT_DB[0]).speed / 1.852;
