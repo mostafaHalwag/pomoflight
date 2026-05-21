@@ -264,7 +264,7 @@
         </div>
 
         <div style="text-align: center; margin-bottom: 10px;">
-            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.1.8</span></h1>
+            <h1 style="font-size: 1.5em; margin: 0; color: var(--accent);">Flight Tracker <span style="font-size: 0.4em; opacity: 0.6; vertical-align: top;">v1.1.10</span></h1>
         </div>
 
         <!-- Views -->
@@ -833,6 +833,7 @@
                     FlightContext.rafId = requestAnimationFrame(updateHUD);
                 }
             }
+            saveActiveFlightState();
         }
 
         function checkAndRequestNotification() {
@@ -865,7 +866,7 @@
 
         // INIT
         function init() {
-            if (checkSavedBreakState()) {
+            if (checkSavedActiveFlightState()) {
                 loadProfile();
                 attachEvents();
                 return;
@@ -897,7 +898,7 @@
 
                 // The interactive sphere (larger hover/click area)
                 let hitArea = L.circleMarker([ap.lat, ap.lon], {
-                    radius: 20, 
+                    radius: 35, 
                     color: 'transparent', 
                     fillColor: 'rgba(255,255,255,0.1)', 
                     fillOpacity: 0, 
@@ -1573,6 +1574,7 @@
                     }
                 }
                 
+                saveActiveFlightState();
                 checkAndRequestNotification();
 
                 if (audioCtx && audioCtx.state === 'suspended') {
@@ -1754,6 +1756,7 @@
 
         function endFlight(completed) {
             FlightContext.sessionEnded = true;
+            saveActiveFlightState();
             if (completed) {
                 handleLanding();
             } else {
@@ -1772,6 +1775,7 @@
 
         function handleLanding() {
             FlightContext.sessionEnded = true;
+            saveActiveFlightState();
             if (FlightContext.rafId) cancelAnimationFrame(FlightContext.rafId);
             clearAllTimeouts();
             clearAutoFollow();
@@ -1979,7 +1983,7 @@
             
             FlightContext.breakStartTime = Date.now();
             FlightContext.breakEndTime = Date.now() + mins * 60 * 1000;
-            saveBreakState();
+            saveActiveFlightState();
             updateBreakHUD();
         }
 
@@ -2028,68 +2032,81 @@
             localStorage.removeItem('FlightTracker_BreakState');
         }
 
-        function saveBreakState() {
-            if (FlightContext.breakEndTime) {
-                localStorage.setItem('FlightTracker_BreakState', JSON.stringify(FlightContext));
+        function saveActiveFlightState() {
+            if (FlightContext.currentFlight && !FlightContext.sessionEnded) {
+                let st = { ...FlightContext, rafId: null, activeTimeouts: [] };
+                localStorage.setItem('FlightTracker_ActiveFlight', JSON.stringify(st));
+            } else {
+                localStorage.removeItem('FlightTracker_ActiveFlight');
             }
         }
 
-        function checkSavedBreakState() {
+        function restoreVisualState() {
+            let ac = AIRCRAFT_DB.find(a => a.id === selectedAircraftId) || AIRCRAFT_DB[0];
+            let overlayInner = document.getElementById('plane-overlay-inner');
+            overlayInner.innerHTML = ac.svg;
+            document.getElementById('plane-overlay').classList.remove('hidden');
+        }
+
+        function checkSavedActiveFlightState() {
             try {
-                let saved = localStorage.getItem('FlightTracker_BreakState');
+                let saved = localStorage.getItem('FlightTracker_ActiveFlight');
                 if (saved) {
                     let st = JSON.parse(saved);
-                    if (st.breakEndTime && st.breakStartTime && st.currentFlight) {
-                        if (Date.now() < st.breakEndTime || Date.now() < st.breakStartTime + 120000) {
-                            Object.assign(FlightContext, st);
-                            
-                            // Restore visual state
-                            let p1 = getAirport(FlightContext.currentFlight.from);
-                            let ac = AIRCRAFT_DB.find(a => a.id === selectedAircraftId) || AIRCRAFT_DB[0];
-                            let overlayInner = document.getElementById('plane-overlay-inner');
-                            overlayInner.innerHTML = ac.svg;
-                            document.getElementById('plane-overlay').classList.remove('hidden');
-
-                            showView('view-break');
-                            document.getElementById('break-options').style.display = 'none';
-                            document.getElementById('break-timer-container').classList.remove('hidden');
-
-                            let h2 = document.querySelector('#view-break h2');
-                            if (h2) h2.innerText = st.afterBreakAction === 'resumeFlight' ? "In-Flight Rest" : "Layover";
-
-                            updateBreakHUD();
-                            return true;
+                    if (st.currentFlight && !st.sessionEnded) {
+                        // Restore Flight Context
+                        Object.assign(FlightContext, st, { rafId: null, activeTimeouts: [] });
+                        
+                        // Check if it was in a break
+                        if (st.breakEndTime && st.breakStartTime) {
+                            if (Date.now() < st.breakEndTime || Date.now() < st.breakStartTime + 120000) {
+                                // Resume Break View
+                                restoreVisualState();
+                                showView('view-break');
+                                document.getElementById('break-options').style.display = 'none';
+                                document.getElementById('break-timer-container').classList.remove('hidden');
+                                let h2 = document.querySelector('#view-break h2');
+                                if (h2) h2.innerText = st.afterBreakAction === 'resumeFlight' ? "In-Flight Rest" : "Layover";
+                                updateBreakHUD();
+                                return true;
+                            } else {
+                                // Break finished while away, open break view to let them click resume
+                                restoreVisualState();
+                                showView('view-break');
+                                document.getElementById('break-options').style.display = 'none';
+                                document.getElementById('break-timer-container').classList.remove('hidden');
+                                let h2 = document.querySelector('#view-break h2');
+                                if (h2) h2.innerText = "Break Complete";
+                                document.getElementById('break-time').innerText = "00:00";
+                                document.getElementById('btn-end-break').style.opacity = '1';
+                                document.getElementById('btn-end-break').style.pointerEvents = 'auto';
+                                document.getElementById('btn-end-break').innerText = "Resume Flight";
+                                document.getElementById('break-mandatory-text').classList.add('hidden');
+                                return true;
+                            }
                         } else {
-                            // break expired
-                            localStorage.removeItem('FlightTracker_BreakState');
+                            // Resume HUD View Flight
+                            restoreVisualState();
+                            showView('view-hud');
                             
-                            Object.assign(FlightContext, st);
-
-                            // Restore visual state
-                            let p1 = getAirport(FlightContext.currentFlight.from);
-                            let ac = AIRCRAFT_DB.find(a => a.id === selectedAircraftId) || AIRCRAFT_DB[0];
-                            let overlayInner = document.getElementById('plane-overlay-inner');
-                            overlayInner.innerHTML = ac.svg;
-                            document.getElementById('plane-overlay').classList.remove('hidden');
+                            // Adjust time so we don't cheat by pausing while offline
+                            // if it wasn't explicitly manually paused
+                            if (!st.isManuallyPaused) {
+                                FlightContext.isManuallyPaused = true;
+                                FlightContext.pauseStartTime = Date.now();
+                                setPausedState(true);
+                            }
                             
-                            showView('view-break');
-                            document.getElementById('break-options').style.display = 'none';
-                            document.getElementById('break-timer-container').classList.remove('hidden');
-                            
-                            let h2 = document.querySelector('#view-break h2');
-                            if (h2) h2.innerText = "Break Complete";
-                            
-                            document.getElementById('break-time').innerText = "00:00";
-                            document.getElementById('btn-end-break').style.opacity = '1';
-                            document.getElementById('btn-end-break').style.pointerEvents = 'auto';
-                            document.getElementById('btn-end-break').innerText = "Resume Flight";
-                            document.getElementById('break-mandatory-text').classList.add('hidden');
-                            
+                            startBackgroundLoop();
+                            startAutoFollow();
+                            FlightContext.rafId = requestAnimationFrame(updateHUD);
                             return true;
                         }
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(e);
+            }
             return false;
         }
 
@@ -2099,7 +2116,7 @@
             
             FlightContext.breakStartTime = Date.now();
             FlightContext.breakEndTime = Date.now() + mins * 60 * 1000;
-            saveBreakState();
+            saveActiveFlightState();
             
             let fuelLevel = document.getElementById('fuel-level');
             fuelLevel.style.transition = 'none';
@@ -2320,7 +2337,12 @@
             FlightContext.notifiedAboutLanding = false;
             FlightContext.notifiedLanded = false;
             backgroundLoopInterval = setInterval(() => {
-                if (FlightContext.sessionEnded || !FlightContext.currentFlight || FlightContext.isManuallyPaused) return;
+                if (FlightContext.sessionEnded || !FlightContext.currentFlight) return;
+                
+                // Save state periodically
+                saveActiveFlightState();
+
+                if (FlightContext.isManuallyPaused) return;
 
                 let elapsed = Date.now() - FlightContext.sessionStartTime - FlightContext.totalPausedMs;
                 const totalMs = FlightContext.currentFlight.min * 60 * 1000;
